@@ -16,7 +16,6 @@ app.include_router(documents.router)
 @app.middleware("http")
 async def hardening_middleware(request: Request, call_next):
     request_id = str(uuid.uuid4())
-    start = time.perf_counter()
     response = await call_next(request)
     duration_ms = round((time.perf_counter() - start) * 1000, 2)
 
@@ -30,8 +29,6 @@ async def hardening_middleware(request: Request, call_next):
 
 @app.on_event("startup")
 def on_startup() -> None:
-    init_db()
-
 
 @app.get("/", tags=["root"])
 def read_root():

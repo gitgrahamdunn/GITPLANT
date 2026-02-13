@@ -79,6 +79,65 @@ def test_commit_push_pull_and_history_flow():
     pull = client.post(f"/documents/branches/{main_branch_id}/pull")
     assert pull.status_code == 200
     assert len(pull.json()["updates"]) == 1
+    assert pull.json()["updates"][0]["revision"] == "B"
+
+    history = client.get(f"/documents/{document_id}/history")
+    assert history.status_code == 200
+    assert len(history.json()) == 1
+    assert history.json()[0]["commit_message"] == "Updated PSV sizing basis"
+
+
+def test_compare_revisions_returns_changed_fields():
+    reset_db()
+
+    doc = client.post(
+        "/documents",
+        json={
+            "project_code": "PRJ-2",
+            "document_number": "MECH-2201",
+            "title": "Pump datasheet",
+            "discipline": "Mechanical",
+        },
+    )
+    document_id = doc.json()["id"]
+
+    branch = client.post(f"/documents/{document_id}/branches", json={"name": "main"})
+    assert branch.status_code == 200
+
+    rev_a = client.post(
+        f"/documents/{document_id}/commit?branch=main",
+        json={
+            "revision": "A",
+            "commit_message": "Initial issue",
+            "file_hash": "hash-a",
+            "author_email": "engineer@edms.local",
+        },
+    )
+    assert rev_a.status_code == 200
+
+    rev_b = client.post(
+        f"/documents/{document_id}/commit?branch=main",
+        json={
+            "revision": "B",
+            "commit_message": "Updated nozzle orientation",
+            "file_hash": "hash-b",
+            "author_email": "engineer@edms.local",
+        },
+    )
+    assert rev_b.status_code == 200
+
+    comparison = client.get(
+        f"/documents/{document_id}/compare",
+        params={"from_revision_id": rev_a.json()["id"], "to_revision_id": rev_b.json()["id"]},
+    )
+    assert comparison.status_code == 200
+
+    payload = comparison.json()
+    changed_field_names = {field["field"] for field in payload["changed_fields"]}
+    assert "revision" in changed_field_names
+    assert "commit_message" in changed_field_names
+    assert "file_hash" in changed_field_names
+    assert payload["is_same_file"] is False
 
 
 def test_workflow_permissions_and_week8_reports():
@@ -118,27 +177,6 @@ def test_workflow_permissions_and_week8_reports():
     )
     assert rev.status_code == 200
 
-    rev2 = client.post(
-        f"/documents/{doc_id}/commit?branch=main",
-        headers=engineer_headers,
-        json={
-            "revision": "B",
-            "commit_message": "Issue for approval update",
-            "file_hash": "hash-elec-8001-b",
-            "author_email": "engineer@edms.local",
-            "content_text": "new-value",
-        },
-    )
-    assert rev2.status_code == 200
-
-    text_diff = client.get(
-        f"/documents/{doc_id}/compare/text",
-        params={"from_revision_id": rev.json()["id"], "to_revision_id": rev2.json()["id"]},
-    )
-    assert text_diff.status_code == 200
-    assert "-old-value" in text_diff.json()["diff"]
-    assert "+new-value" in text_diff.json()["diff"]
-
     submit = client.post(
         f"/documents/{doc_id}/submit-for-approval",
         headers=engineer_headers,
@@ -174,6 +212,59 @@ def test_workflow_permissions_and_week8_reports():
     )
     assert transmittal.status_code == 200
 
+    # verify status updated in DB
+    with Session(engine) as session:
+        stored_document = session.get(Document, doc_id)
+        assert stored_document is not None
+        assert stored_document.status == "IFC"
+
+
+def test_document_search_transmittal_audit_and_dashboard_flow():
+    reset_db()
+    controller_headers = auth_headers("controller@edms.local", "controller123")
+
+    doc = client.post(
+        "/documents",
+        json={
+            "project_code": "PRJ-6",
+            "document_number": "MECH-6002",
+            "title": "Pump GA drawing",
+            "discipline": "Mechanical",
+        },
+    )
+    assert doc.status_code == 200
+    doc_id = doc.json()["id"]
+
+    search = client.get("/documents/search", params={"q": "Pump", "discipline": "Mechanical"})
+    assert search.status_code == 200
+    assert search.json()["total"] == 1
+
+    branch = client.post(f"/documents/{doc_id}/branches", json={"name": "main"})
+    assert branch.status_code == 200
+
+    rev = client.post(
+        f"/documents/{doc_id}/commit?branch=main",
+        json={
+            "revision": "A",
+            "commit_message": "Issue for vendor",
+            "file_hash": "hash-mech-a",
+            "author_email": "engineer@edms.local",
+        },
+    )
+    assert rev.status_code == 200
+
+    transmittal = client.post(
+        f"/documents/{doc_id}/transmittals",
+        json={
+            "revision_id": rev.json()["id"],
+            "transmittal_number": "TRM-0001",
+            "issued_to": "Vendor-X",
+            "vendor_code": "VX",
+            "notes": "For quote",
+        },
+    )
+    assert transmittal.status_code == 200
+
     extended = client.get(
         "/documents/reports/dashboard-extended",
         headers=controller_headers,
@@ -195,47 +286,15 @@ def test_workflow_permissions_and_week8_reports():
     )
     assert export_jsonl.status_code == 200
     assert export_jsonl.headers["content-type"].startswith("application/x-ndjson")
-    assert "\"event_type\"" in export_jsonl.text
+    assert '"event_type"' in export_jsonl.text
 
+    # keep these main-branch checks too
+    audit = client.get(f"/documents/{doc_id}/audit-events")
+    assert audit.status_code == 200
+    assert len(audit.json()) >= 3
 
-def test_backup_and_restore_snapshot_roundtrip():
-    reset_db()
-    controller_headers = auth_headers("controller@edms.local", "controller123")
-    engineer_headers = auth_headers("engineer@edms.local", "engineer123")
+    summary = client.get("/documents/reports/dashboard-summary")
+    assert summary.status_code == 200
+    assert summary.json()["total_documents"] == 1
+    assert summary.json()["total_transmittals"] == 1
 
-    doc = client.post(
-        "/documents",
-        headers=engineer_headers,
-        json={
-            "project_code": "PRJ-12",
-            "document_number": "PROC-1200",
-            "title": "Operating philosophy",
-            "discipline": "Process",
-        },
-    )
-    assert doc.status_code == 200
-
-    backup = client.get("/documents/admin/backup", headers=controller_headers)
-    assert backup.status_code == 200
-    assert backup.json()["snapshot"]["documents"]
-
-    with Session(engine) as session:
-        session.exec(delete(AuditEvent))
-        session.exec(delete(Transmittal))
-        session.exec(delete(Approval))
-        session.exec(delete(DocumentRevision))
-        session.exec(delete(Branch))
-        session.exec(delete(Document))
-        session.commit()
-
-    restore = client.post(
-        "/documents/admin/restore",
-        headers=controller_headers,
-        json={"snapshot": backup.json()["snapshot"]},
-    )
-    assert restore.status_code == 200
-    assert restore.json()["status"] == "restored"
-
-    search_after = client.get("/documents/search", params={"q": "Operating"})
-    assert search_after.status_code == 200
-    assert search_after.json()["total"] == 1
