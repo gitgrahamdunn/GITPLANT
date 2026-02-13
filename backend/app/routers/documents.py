@@ -11,8 +11,6 @@ from app.schemas import (
     DocumentResponse,
     PullResponse,
     PushResponse,
-    RevisionCompareResponse,
-    RevisionDiffField,
     RevisionResponse,
 )
 
@@ -152,49 +150,6 @@ def pull_branch(branch_id: int, session: Session = Depends(get_session)):
         session.commit()
 
     return PullResponse(branch_id=branch_id, updates=updates)
-
-
-@router.get(
-    "/{document_id}/compare",
-    response_model=RevisionCompareResponse,
-    summary="Compare two revisions",
-)
-def compare_document_revisions(
-    document_id: int,
-    from_revision_id: int,
-    to_revision_id: int,
-    session: Session = Depends(get_session),
-):
-    document = session.get(Document, document_id)
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
-
-    from_revision = session.get(DocumentRevision, from_revision_id)
-    to_revision = session.get(DocumentRevision, to_revision_id)
-
-    if not from_revision or from_revision.document_id != document_id:
-        raise HTTPException(status_code=404, detail="From revision not found for document")
-    if not to_revision or to_revision.document_id != document_id:
-        raise HTTPException(status_code=404, detail="To revision not found for document")
-
-    fields_to_compare = ["revision", "commit_message", "file_hash", "author_email", "is_pushed"]
-    changed_fields: list[RevisionDiffField] = []
-
-    for field in fields_to_compare:
-        from_value = getattr(from_revision, field)
-        to_value = getattr(to_revision, field)
-        if from_value != to_value:
-            changed_fields.append(
-                RevisionDiffField(field=field, from_value=from_value, to_value=to_value)
-            )
-
-    return RevisionCompareResponse(
-        document_id=document_id,
-        from_revision=from_revision,
-        to_revision=to_revision,
-        changed_fields=changed_fields,
-        is_same_file=from_revision.file_hash == to_revision.file_hash,
-    )
 
 
 @router.get("/{document_id}/history", response_model=list[RevisionResponse], summary="Revision history")
