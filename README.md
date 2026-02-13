@@ -1,6 +1,8 @@
 # EDMS (Week 1–10 Setup)
 
 This repository now contains the **Week 1–10 project foundation** for an oil & gas EDMS MVP.
+This PR re-issue includes a fresh commit to make merge/review tooling pick up a clean head for conflict resolution.
+
 
 ## What is included
 - FastAPI backend scaffold
