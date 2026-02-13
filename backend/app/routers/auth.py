@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from app.schemas import AuthLoginRequest, AuthLoginResponse
+from app.schemas import AuthLoginRequest, AuthLoginResponse, AuthMeResponse
+from app.security import CurrentUser, get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -18,4 +19,10 @@ def login(payload: AuthLoginRequest):
     if not user or user["password"] != payload.password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return AuthLoginResponse(access_token=f"demo-token-for-{payload.email}", role=user["role"])
+    token = f"demo-token-for-{payload.email}|{user['role']}"
+    return AuthLoginResponse(access_token=token, role=user["role"])
+
+
+@router.get("/me", response_model=AuthMeResponse, summary="Current user")
+def me(current_user: CurrentUser = Depends(get_current_user)):
+    return AuthMeResponse(email=current_user.email, role=current_user.role)

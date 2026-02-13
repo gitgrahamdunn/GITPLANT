@@ -1,17 +1,26 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict
+
+
+class ORMResponseModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AuthLoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
 
-class AuthLoginResponse(BaseModel):
+class AuthLoginResponse(ORMResponseModel):
     access_token: str
     token_type: str = "bearer"
+    role: str
+
+
+class AuthMeResponse(ORMResponseModel):
+    email: str
     role: str
 
 
@@ -22,7 +31,7 @@ class DocumentCreateRequest(BaseModel):
     discipline: str
 
 
-class DocumentResponse(BaseModel):
+class DocumentResponse(ORMResponseModel):
     id: int
     project_code: str
     document_number: str
@@ -36,7 +45,7 @@ class BranchCreateRequest(BaseModel):
     name: str
 
 
-class BranchResponse(BaseModel):
+class BranchResponse(ORMResponseModel):
     id: int
     document_id: int
     name: str
@@ -46,10 +55,10 @@ class CommitRequest(BaseModel):
     revision: str
     commit_message: str
     file_hash: str
-    author_email: EmailStr
+    author_email: str
 
 
-class RevisionResponse(BaseModel):
+class RevisionResponse(ORMResponseModel):
     id: int
     document_id: int
     branch_id: int
@@ -61,24 +70,24 @@ class RevisionResponse(BaseModel):
     created_at: datetime
 
 
-class PushResponse(BaseModel):
+class PushResponse(ORMResponseModel):
     branch_id: int
     pushed_count: int
     latest_revision: str | None
 
 
-class PullResponse(BaseModel):
+class PullResponse(ORMResponseModel):
     branch_id: int
     updates: list[RevisionResponse]
 
 
-class RevisionDiffField(BaseModel):
+class RevisionDiffField(ORMResponseModel):
     field: str
     from_value: Any
     to_value: Any
 
 
-class RevisionCompareResponse(BaseModel):
+class RevisionCompareResponse(ORMResponseModel):
     document_id: int
     from_revision: RevisionResponse
     to_revision: RevisionResponse
@@ -88,7 +97,7 @@ class RevisionCompareResponse(BaseModel):
 
 class SubmitForApprovalRequest(BaseModel):
     revision_id: int
-    approver_email: EmailStr
+    approver_email: str
 
 
 class ApproveRequest(BaseModel):
@@ -96,7 +105,7 @@ class ApproveRequest(BaseModel):
     comments: str | None = None
 
 
-class ApprovalResponse(BaseModel):
+class ApprovalResponse(ORMResponseModel):
     id: int
     document_id: int
     revision_id: int
@@ -107,7 +116,7 @@ class ApprovalResponse(BaseModel):
     created_at: datetime
 
 
-class DocumentSearchResponse(BaseModel):
+class DocumentSearchResponse(ORMResponseModel):
     total: int
     items: list[DocumentResponse]
 
@@ -120,7 +129,7 @@ class CreateTransmittalRequest(BaseModel):
     notes: str | None = None
 
 
-class TransmittalResponse(BaseModel):
+class TransmittalResponse(ORMResponseModel):
     id: int
     document_id: int
     revision_id: int
@@ -131,7 +140,7 @@ class TransmittalResponse(BaseModel):
     created_at: datetime
 
 
-class AuditEventResponse(BaseModel):
+class AuditEventResponse(ORMResponseModel):
     id: int
     document_id: int
     event_type: str
@@ -140,9 +149,25 @@ class AuditEventResponse(BaseModel):
     created_at: datetime
 
 
-class DashboardSummaryResponse(BaseModel):
+class DashboardSummaryResponse(ORMResponseModel):
     total_documents: int
     documents_ifa: int
     documents_ifc: int
     open_approvals: int
     total_transmittals: int
+
+
+class StatusBreakdownItem(ORMResponseModel):
+    status: str
+    count: int
+
+
+class DisciplineBreakdownItem(ORMResponseModel):
+    discipline: str
+    count: int
+
+
+class DashboardExtendedResponse(ORMResponseModel):
+    total_documents: int
+    status_breakdown: list[StatusBreakdownItem]
+    discipline_breakdown: list[DisciplineBreakdownItem]

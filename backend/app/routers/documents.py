@@ -1,6 +1,8 @@
+import csv
 from datetime import datetime
+from io import StringIO
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlmodel import Session, col, or_, select
 
 from app.db import get_session
@@ -13,7 +15,9 @@ from app.schemas import (
     BranchResponse,
     CommitRequest,
     CreateTransmittalRequest,
+    DashboardExtendedResponse,
     DashboardSummaryResponse,
+    DisciplineBreakdownItem,
     DocumentCreateRequest,
     DocumentResponse,
     DocumentSearchResponse,
@@ -22,9 +26,11 @@ from app.schemas import (
     RevisionCompareResponse,
     RevisionDiffField,
     RevisionResponse,
+    StatusBreakdownItem,
     SubmitForApprovalRequest,
     TransmittalResponse,
 )
+from app.security import CurrentUser, get_current_user, require_roles
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -47,7 +53,11 @@ def record_audit_event(
 
 
 @router.post("", response_model=DocumentResponse, summary="Create document")
-def create_document(payload: DocumentCreateRequest, session: Session = Depends(get_session)):
+def create_document(
+    payload: DocumentCreateRequest,
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(require_roles("document_controller", "engineer")),
+):
     existing = session.exec(
         select(Document).where(Document.document_number == payload.document_number)
     ).first()
@@ -63,7 +73,7 @@ def create_document(payload: DocumentCreateRequest, session: Session = Depends(g
         session,
         document.id,
         "document_created",
-        "system@edms.local",
+        current_user.email,
         f"Document {document.document_number} created",
     )
     session.commit()
@@ -103,7 +113,10 @@ def search_documents(
     response_model=DashboardSummaryResponse,
     summary="Dashboard metrics for document control",
 )
-def dashboard_summary(session: Session = Depends(get_session)):
+def dashboard_summary(
+    session: Session = Depends(get_session),
+    _: CurrentUser = Depends(require_roles("document_controller", "approver")),
+):
     documents = session.exec(select(Document)).all()
     approvals = session.exec(select(Approval)).all()
     transmittals = session.exec(select(Transmittal)).all()
@@ -117,9 +130,45 @@ def dashboard_summary(session: Session = Depends(get_session)):
     )
 
 
+@router.get(
+    "/reports/dashboard-extended",
+    response_model=DashboardExtendedResponse,
+    summary="Extended dashboard metrics",
+)
+def dashboard_extended(
+    session: Session = Depends(get_session),
+    _: CurrentUser = Depends(require_roles("document_controller", "approver")),
+):
+    documents = session.exec(select(Document)).all()
+
+    by_status: dict[str, int] = {}
+    by_discipline: dict[str, int] = {}
+    for doc in documents:
+        by_status[doc.status] = by_status.get(doc.status, 0) + 1
+        by_discipline[doc.discipline] = by_discipline.get(doc.discipline, 0) + 1
+
+    status_breakdown = [
+        StatusBreakdownItem(status=k, count=v)
+        for k, v in sorted(by_status.items(), key=lambda item: item[0])
+    ]
+    discipline_breakdown = [
+        DisciplineBreakdownItem(discipline=k, count=v)
+        for k, v in sorted(by_discipline.items(), key=lambda item: item[0])
+    ]
+
+    return DashboardExtendedResponse(
+        total_documents=len(documents),
+        status_breakdown=status_breakdown,
+        discipline_breakdown=discipline_breakdown,
+    )
+
+
 @router.post("/{document_id}/branches", response_model=BranchResponse, summary="Create branch")
 def create_branch(
-    document_id: int, payload: BranchCreateRequest, session: Session = Depends(get_session)
+    document_id: int,
+    payload: BranchCreateRequest,
+    session: Session = Depends(get_session),
+    _: CurrentUser = Depends(require_roles("document_controller", "engineer")),
 ):
     document = session.get(Document, document_id)
     if not document:
@@ -140,7 +189,11 @@ def create_branch(
 
 @router.post("/{document_id}/commit", response_model=RevisionResponse, summary="Commit revision")
 def commit_document_revision(
-    document_id: int, payload: CommitRequest, branch: str, session: Session = Depends(get_session)
+    document_id: int,
+    payload: CommitRequest,
+    branch: str,
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(require_roles("engineer", "document_controller")),
 ):
     document = session.get(Document, document_id)
     if not document:
@@ -178,7 +231,7 @@ def commit_document_revision(
         session,
         document_id,
         "revision_committed",
-        str(payload.author_email),
+        current_user.email,
         f"Revision {payload.revision} committed on branch {branch}",
     )
     session.commit()
@@ -186,7 +239,11 @@ def commit_document_revision(
 
 
 @router.post("/branches/{branch_id}/push", response_model=PushResponse, summary="Push revisions")
-def push_branch(branch_id: int, session: Session = Depends(get_session)):
+def push_branch(
+    branch_id: int,
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(require_roles("engineer", "document_controller")),
+):
     branch = session.get(Branch, branch_id)
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
@@ -212,7 +269,7 @@ def push_branch(branch_id: int, session: Session = Depends(get_session)):
         session,
         branch.document_id,
         "branch_pushed",
-        latest.author_email,
+        current_user.email,
         f"Pushed {len(pending_revisions)} revision(s) from branch {branch.name}",
     )
     session.commit()
@@ -304,6 +361,7 @@ def submit_for_approval(
     document_id: int,
     payload: SubmitForApprovalRequest,
     session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(require_roles("engineer", "document_controller")),
 ):
     document = session.get(Document, document_id)
     if not document:
@@ -330,7 +388,7 @@ def submit_for_approval(
         session,
         document_id,
         "submitted_for_approval",
-        revision.author_email,
+        current_user.email,
         f"Revision {revision.revision} submitted to {payload.approver_email}",
     )
     session.commit()
@@ -348,6 +406,7 @@ def decide_approval(
     approval_id: int,
     payload: ApproveRequest,
     session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(require_roles("approver", "document_controller")),
 ):
     document = session.get(Document, document_id)
     if not document:
@@ -375,7 +434,7 @@ def decide_approval(
         session,
         document_id,
         "approval_decision",
-        approval.approver_email,
+        current_user.email,
         f"Decision: {payload.decision}",
     )
     session.commit()
@@ -392,6 +451,7 @@ def create_transmittal(
     document_id: int,
     payload: CreateTransmittalRequest,
     session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(require_roles("document_controller", "engineer")),
 ):
     document = session.get(Document, document_id)
     if not document:
@@ -420,7 +480,7 @@ def create_transmittal(
         session,
         document_id,
         "transmittal_created",
-        revision.author_email,
+        current_user.email,
         f"Transmittal {payload.transmittal_number} issued to {payload.issued_to}",
     )
     session.commit()
@@ -460,6 +520,39 @@ def list_audit_events(document_id: int, session: Session = Depends(get_session))
         .where(AuditEvent.document_id == document_id)
         .order_by(col(AuditEvent.id))
     ).all()
+
+
+@router.get(
+    "/{document_id}/audit-events/export",
+    summary="Export audit events as CSV",
+)
+def export_audit_events_csv(
+    document_id: int,
+    session: Session = Depends(get_session),
+    _: CurrentUser = Depends(require_roles("document_controller", "approver")),
+):
+    document = session.get(Document, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    events = session.exec(
+        select(AuditEvent)
+        .where(AuditEvent.document_id == document_id)
+        .order_by(col(AuditEvent.id))
+    ).all()
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id", "event_type", "actor_email", "details", "created_at"])
+    for event in events:
+        writer.writerow([event.id, event.event_type, event.actor_email, event.details, event.created_at])
+
+    filename = f"audit_document_{document_id}.csv"
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{document_id}/history", response_model=list[RevisionResponse], summary="Revision history")
