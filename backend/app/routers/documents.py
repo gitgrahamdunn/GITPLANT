@@ -1,20 +1,49 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, col, select
+from sqlmodel import Session, col, or_, select
 
 from app.db import get_session
-from app.models import Branch, Document, DocumentRevision
+from app.models import Approval, AuditEvent, Branch, Document, DocumentRevision, Transmittal
 from app.schemas import (
+    ApprovalResponse,
+    ApproveRequest,
+    AuditEventResponse,
     BranchCreateRequest,
     BranchResponse,
     CommitRequest,
+    CreateTransmittalRequest,
+    DashboardSummaryResponse,
     DocumentCreateRequest,
     DocumentResponse,
+    DocumentSearchResponse,
     PullResponse,
     PushResponse,
+    RevisionCompareResponse,
+    RevisionDiffField,
     RevisionResponse,
+    SubmitForApprovalRequest,
+    TransmittalResponse,
 )
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+def record_audit_event(
+    session: Session,
+    document_id: int,
+    event_type: str,
+    actor_email: str,
+    details: str,
+) -> None:
+    session.add(
+        AuditEvent(
+            document_id=document_id,
+            event_type=event_type,
+            actor_email=actor_email,
+            details=details,
+        )
+    )
 
 
 @router.post("", response_model=DocumentResponse, summary="Create document")
@@ -29,7 +58,63 @@ def create_document(payload: DocumentCreateRequest, session: Session = Depends(g
     session.add(document)
     session.commit()
     session.refresh(document)
+
+    record_audit_event(
+        session,
+        document.id,
+        "document_created",
+        "system@edms.local",
+        f"Document {document.document_number} created",
+    )
+    session.commit()
     return document
+
+
+@router.get("/search", response_model=DocumentSearchResponse, summary="Search documents")
+def search_documents(
+    session: Session = Depends(get_session),
+    q: str | None = None,
+    project_code: str | None = None,
+    discipline: str | None = None,
+    status: str | None = None,
+):
+    query = select(Document)
+
+    if q:
+        query = query.where(
+            or_(
+                Document.title.ilike(f"%{q}%"),
+                Document.document_number.ilike(f"%{q}%"),
+            )
+        )
+    if project_code:
+        query = query.where(Document.project_code == project_code)
+    if discipline:
+        query = query.where(Document.discipline == discipline)
+    if status:
+        query = query.where(Document.status == status)
+
+    items = session.exec(query.order_by(col(Document.id))).all()
+    return DocumentSearchResponse(total=len(items), items=items)
+
+
+@router.get(
+    "/reports/dashboard-summary",
+    response_model=DashboardSummaryResponse,
+    summary="Dashboard metrics for document control",
+)
+def dashboard_summary(session: Session = Depends(get_session)):
+    documents = session.exec(select(Document)).all()
+    approvals = session.exec(select(Approval)).all()
+    transmittals = session.exec(select(Transmittal)).all()
+
+    return DashboardSummaryResponse(
+        total_documents=len(documents),
+        documents_ifa=sum(1 for d in documents if d.status == "IFA"),
+        documents_ifc=sum(1 for d in documents if d.status == "IFC"),
+        open_approvals=sum(1 for a in approvals if a.decision == "pending"),
+        total_transmittals=len(transmittals),
+    )
 
 
 @router.post("/{document_id}/branches", response_model=BranchResponse, summary="Create branch")
@@ -88,6 +173,15 @@ def commit_document_revision(
     session.add(revision)
     session.commit()
     session.refresh(revision)
+
+    record_audit_event(
+        session,
+        document_id,
+        "revision_committed",
+        str(payload.author_email),
+        f"Revision {payload.revision} committed on branch {branch}",
+    )
+    session.commit()
     return revision
 
 
@@ -114,7 +208,13 @@ def push_branch(branch_id: int, session: Session = Depends(get_session)):
     if document:
         document.current_revision = latest.revision
 
-    session.add(branch)
+    record_audit_event(
+        session,
+        branch.document_id,
+        "branch_pushed",
+        latest.author_email,
+        f"Pushed {len(pending_revisions)} revision(s) from branch {branch.name}",
+    )
     session.commit()
 
     return PushResponse(
@@ -150,6 +250,216 @@ def pull_branch(branch_id: int, session: Session = Depends(get_session)):
         session.commit()
 
     return PullResponse(branch_id=branch_id, updates=updates)
+
+
+@router.get(
+    "/{document_id}/compare",
+    response_model=RevisionCompareResponse,
+    summary="Compare two revisions",
+)
+def compare_document_revisions(
+    document_id: int,
+    from_revision_id: int,
+    to_revision_id: int,
+    session: Session = Depends(get_session),
+):
+    document = session.get(Document, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    from_revision = session.get(DocumentRevision, from_revision_id)
+    to_revision = session.get(DocumentRevision, to_revision_id)
+
+    if not from_revision or from_revision.document_id != document_id:
+        raise HTTPException(status_code=404, detail="From revision not found for document")
+    if not to_revision or to_revision.document_id != document_id:
+        raise HTTPException(status_code=404, detail="To revision not found for document")
+
+    fields_to_compare = ["revision", "commit_message", "file_hash", "author_email", "is_pushed"]
+    changed_fields: list[RevisionDiffField] = []
+
+    for field in fields_to_compare:
+        from_value = getattr(from_revision, field)
+        to_value = getattr(to_revision, field)
+        if from_value != to_value:
+            changed_fields.append(
+                RevisionDiffField(field=field, from_value=from_value, to_value=to_value)
+            )
+
+    return RevisionCompareResponse(
+        document_id=document_id,
+        from_revision=from_revision,
+        to_revision=to_revision,
+        changed_fields=changed_fields,
+        is_same_file=from_revision.file_hash == to_revision.file_hash,
+    )
+
+
+@router.post(
+    "/{document_id}/submit-for-approval",
+    response_model=ApprovalResponse,
+    summary="Submit a revision for approval",
+)
+def submit_for_approval(
+    document_id: int,
+    payload: SubmitForApprovalRequest,
+    session: Session = Depends(get_session),
+):
+    document = session.get(Document, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    revision = session.get(DocumentRevision, payload.revision_id)
+    if not revision or revision.document_id != document_id:
+        raise HTTPException(status_code=404, detail="Revision not found for document")
+
+    if document.status not in {"WIP", "IFR", "IFI"}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Document in status {document.status} cannot be submitted for approval",
+        )
+
+    document.status = "IFA"
+    approval = Approval(
+        document_id=document_id,
+        revision_id=payload.revision_id,
+        approver_email=str(payload.approver_email),
+    )
+    session.add(approval)
+    record_audit_event(
+        session,
+        document_id,
+        "submitted_for_approval",
+        revision.author_email,
+        f"Revision {revision.revision} submitted to {payload.approver_email}",
+    )
+    session.commit()
+    session.refresh(approval)
+    return approval
+
+
+@router.post(
+    "/{document_id}/approvals/{approval_id}/decision",
+    response_model=ApprovalResponse,
+    summary="Approve or reject submitted revision",
+)
+def decide_approval(
+    document_id: int,
+    approval_id: int,
+    payload: ApproveRequest,
+    session: Session = Depends(get_session),
+):
+    document = session.get(Document, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    approval = session.get(Approval, approval_id)
+    if not approval or approval.document_id != document_id:
+        raise HTTPException(status_code=404, detail="Approval request not found for document")
+
+    if approval.decision != "pending":
+        raise HTTPException(status_code=409, detail="Approval decision already recorded")
+
+    approval.decision = payload.decision
+    approval.comments = payload.comments
+    approval.decided_at = datetime.utcnow()
+
+    if payload.decision == "approved":
+        document.status = "IFC"
+    else:
+        document.status = "IFR"
+
+    session.add(approval)
+    session.add(document)
+    record_audit_event(
+        session,
+        document_id,
+        "approval_decision",
+        approval.approver_email,
+        f"Decision: {payload.decision}",
+    )
+    session.commit()
+    session.refresh(approval)
+    return approval
+
+
+@router.post(
+    "/{document_id}/transmittals",
+    response_model=TransmittalResponse,
+    summary="Create transmittal for a revision",
+)
+def create_transmittal(
+    document_id: int,
+    payload: CreateTransmittalRequest,
+    session: Session = Depends(get_session),
+):
+    document = session.get(Document, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    revision = session.get(DocumentRevision, payload.revision_id)
+    if not revision or revision.document_id != document_id:
+        raise HTTPException(status_code=404, detail="Revision not found for document")
+
+    exists = session.exec(
+        select(Transmittal).where(Transmittal.transmittal_number == payload.transmittal_number)
+    ).first()
+    if exists:
+        raise HTTPException(status_code=409, detail="Transmittal number already exists")
+
+    transmittal = Transmittal(
+        document_id=document_id,
+        revision_id=payload.revision_id,
+        transmittal_number=payload.transmittal_number,
+        issued_to=payload.issued_to,
+        vendor_code=payload.vendor_code,
+        notes=payload.notes,
+    )
+    session.add(transmittal)
+    record_audit_event(
+        session,
+        document_id,
+        "transmittal_created",
+        revision.author_email,
+        f"Transmittal {payload.transmittal_number} issued to {payload.issued_to}",
+    )
+    session.commit()
+    session.refresh(transmittal)
+    return transmittal
+
+
+@router.get(
+    "/{document_id}/transmittals",
+    response_model=list[TransmittalResponse],
+    summary="List document transmittals",
+)
+def list_transmittals(document_id: int, session: Session = Depends(get_session)):
+    document = session.get(Document, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return session.exec(
+        select(Transmittal)
+        .where(Transmittal.document_id == document_id)
+        .order_by(col(Transmittal.id))
+    ).all()
+
+
+@router.get(
+    "/{document_id}/audit-events",
+    response_model=list[AuditEventResponse],
+    summary="List audit events for a document",
+)
+def list_audit_events(document_id: int, session: Session = Depends(get_session)):
+    document = session.get(Document, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return session.exec(
+        select(AuditEvent)
+        .where(AuditEvent.document_id == document_id)
+        .order_by(col(AuditEvent.id))
+    ).all()
 
 
 @router.get("/{document_id}/history", response_model=list[RevisionResponse], summary="Revision history")
