@@ -40,6 +40,7 @@ class DocumentRevision(SQLModel, table=True):
     commit_message: str
     file_hash: str = Field(index=True)
     author_email: str
+    content_text: Optional[str] = None
     is_pushed: bool = Field(default=False, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

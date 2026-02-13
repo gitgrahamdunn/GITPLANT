@@ -13,7 +13,7 @@ def test_login_success():
     )
     assert response.status_code == 200
     assert response.json()["role"] == "engineer"
-    assert "|engineer" in response.json()["access_token"]
+    assert "." in response.json()["access_token"]
 
 
 def test_login_failure():

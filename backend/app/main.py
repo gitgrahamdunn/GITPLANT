@@ -1,4 +1,7 @@
-from fastapi import FastAPI
+import time
+import uuid
+
+from fastapi import FastAPI, Request
 
 from app.config import settings
 from app.db import init_db
@@ -10,10 +13,22 @@ app.include_router(auth.router)
 app.include_router(documents.router)
 
 
+@app.middleware("http")
+async def hardening_middleware(request: Request, call_next):
+    request_id = str(uuid.uuid4())
+    response = await call_next(request)
+    duration_ms = round((time.perf_counter() - start) * 1000, 2)
+
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Response-Time-Ms"] = str(duration_ms)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
 @app.on_event("startup")
 def on_startup() -> None:
-    init_db()
-
 
 @app.get("/", tags=["root"])
 def read_root():

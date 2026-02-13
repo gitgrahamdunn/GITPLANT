@@ -1,18 +1,13 @@
 from fastapi.testclient import TestClient
 from sqlmodel import Session, delete
 
-<<<<<<< codex/build-edms-with-version-control-features-pzpgd9
 from app.db import engine, init_db
-=======
-from app.db import engine
->>>>>>> main
 from app.main import app
 from app.models import Approval, AuditEvent, Branch, Document, DocumentRevision, Transmittal
 
 client = TestClient(app)
 
 
-<<<<<<< codex/build-edms-with-version-control-features-pzpgd9
 def auth_headers(email: str, password: str) -> dict[str, str]:
     login = client.post("/auth/login", json={"email": email, "password": password})
     token = login.json()["access_token"]
@@ -21,9 +16,6 @@ def auth_headers(email: str, password: str) -> dict[str, str]:
 
 def reset_db() -> None:
     init_db()
-=======
-def reset_db() -> None:
->>>>>>> main
     with Session(engine) as session:
         session.exec(delete(AuditEvent))
         session.exec(delete(Transmittal))
@@ -36,17 +28,11 @@ def reset_db() -> None:
 
 def test_commit_push_pull_and_history_flow():
     reset_db()
-<<<<<<< codex/build-edms-with-version-control-features-pzpgd9
     engineer_headers = auth_headers("engineer@edms.local", "engineer123")
 
     doc = client.post(
         "/documents",
         headers=engineer_headers,
-=======
-
-    doc = client.post(
-        "/documents",
->>>>>>> main
         json={
             "project_code": "PRJ-1",
             "document_number": "P-1001",
@@ -57,7 +43,6 @@ def test_commit_push_pull_and_history_flow():
     assert doc.status_code == 200
     document_id = doc.json()["id"]
 
-<<<<<<< codex/build-edms-with-version-control-features-pzpgd9
     main_branch = client.post(
         f"/documents/{document_id}/branches", headers=engineer_headers, json={"name": "main"}
     )
@@ -69,37 +54,24 @@ def test_commit_push_pull_and_history_flow():
         headers=engineer_headers,
         json={"name": "moc-2026-014"},
     )
-=======
-    main_branch = client.post(f"/documents/{document_id}/branches", json={"name": "main"})
-    assert main_branch.status_code == 200
-    main_branch_id = main_branch.json()["id"]
-
-    moc_branch = client.post(f"/documents/{document_id}/branches", json={"name": "moc-2026-014"})
->>>>>>> main
     assert moc_branch.status_code == 200
     moc_branch_id = moc_branch.json()["id"]
 
     commit = client.post(
         f"/documents/{document_id}/commit?branch=moc-2026-014",
-<<<<<<< codex/build-edms-with-version-control-features-pzpgd9
         headers=engineer_headers,
-=======
->>>>>>> main
         json={
             "revision": "B",
             "commit_message": "Updated PSV sizing basis",
             "file_hash": "hash-b",
             "author_email": "engineer@edms.local",
+            "content_text": "line-1\nline-2",
         },
     )
     assert commit.status_code == 200
     assert commit.json()["is_pushed"] is False
 
-<<<<<<< codex/build-edms-with-version-control-features-pzpgd9
     push = client.post(f"/documents/branches/{moc_branch_id}/push", headers=engineer_headers)
-=======
-    push = client.post(f"/documents/branches/{moc_branch_id}/push")
->>>>>>> main
     assert push.status_code == 200
     assert push.json()["pushed_count"] == 1
     assert push.json()["latest_revision"] == "B"
@@ -107,23 +79,6 @@ def test_commit_push_pull_and_history_flow():
     pull = client.post(f"/documents/branches/{main_branch_id}/pull")
     assert pull.status_code == 200
     assert len(pull.json()["updates"]) == 1
-<<<<<<< codex/build-edms-with-version-control-features-pzpgd9
-
-
-def test_workflow_permissions_and_week8_reports():
-    reset_db()
-    engineer_headers = auth_headers("engineer@edms.local", "engineer123")
-    controller_headers = auth_headers("controller@edms.local", "controller123")
-    approver_headers = auth_headers("approver@edms.local", "approver123")
-
-    doc = client.post(
-        "/documents",
-        headers=engineer_headers,
-        json={
-            "project_code": "PRJ-8",
-            "document_number": "ELEC-8001",
-            "title": "SLD Revamp",
-=======
     assert pull.json()["updates"][0]["revision"] == "B"
 
     history = client.get(f"/documents/{document_id}/history")
@@ -185,21 +140,23 @@ def test_compare_revisions_returns_changed_fields():
     assert payload["is_same_file"] is False
 
 
-def test_workflow_submit_and_approve_updates_status_to_ifc():
+def test_workflow_permissions_and_week8_reports():
     reset_db()
+    engineer_headers = auth_headers("engineer@edms.local", "engineer123")
+    controller_headers = auth_headers("controller@edms.local", "controller123")
+    approver_headers = auth_headers("approver@edms.local", "approver123")
 
     doc = client.post(
         "/documents",
+        headers=engineer_headers,
         json={
-            "project_code": "PRJ-3",
-            "document_number": "ELEC-3001",
-            "title": "Single line diagram",
->>>>>>> main
+            "project_code": "PRJ-8",
+            "document_number": "ELEC-8001",
+            "title": "SLD Revamp",
             "discipline": "Electrical",
         },
     )
     assert doc.status_code == 200
-<<<<<<< codex/build-edms-with-version-control-features-pzpgd9
     doc_id = doc.json()["id"]
 
     branch = client.post(
@@ -215,6 +172,7 @@ def test_workflow_submit_and_approve_updates_status_to_ifc():
             "commit_message": "Issue for approval",
             "file_hash": "hash-elec-8001-a",
             "author_email": "engineer@edms.local",
+            "content_text": "old-value",
         },
     )
     assert rev.status_code == 200
@@ -250,43 +208,20 @@ def test_workflow_submit_and_approve_updates_status_to_ifc():
             "issued_to": "Vendor-Z",
             "vendor_code": "VZ",
             "notes": "IFC issue",
-=======
-    document_id = doc.json()["id"]
-
-    branch = client.post(f"/documents/{document_id}/branches", json={"name": "main"})
-    assert branch.status_code == 200
-
-    commit = client.post(
-        f"/documents/{document_id}/commit?branch=main",
-        json={
-            "revision": "A",
-            "commit_message": "Initial issue for approval",
-            "file_hash": "hash-elec-a",
-            "author_email": "engineer@edms.local",
         },
     )
-    assert commit.status_code == 200
+    assert transmittal.status_code == 200
 
-    submit = client.post(
-        f"/documents/{document_id}/submit-for-approval",
-        json={"revision_id": commit.json()["id"], "approver_email": "approver@edms.local"},
-    )
-    assert submit.status_code == 200
-
-    decision = client.post(
-        f"/documents/{document_id}/approvals/{submit.json()['id']}/decision",
-        json={"decision": "approved", "comments": "Looks good"},
-    )
-    assert decision.status_code == 200
-
+    # verify status updated in DB
     with Session(engine) as session:
-        stored_document = session.get(Document, document_id)
+        stored_document = session.get(Document, doc_id)
         assert stored_document is not None
         assert stored_document.status == "IFC"
 
 
 def test_document_search_transmittal_audit_and_dashboard_flow():
     reset_db()
+    controller_headers = auth_headers("controller@edms.local", "controller123")
 
     doc = client.post(
         "/documents",
@@ -326,12 +261,10 @@ def test_document_search_transmittal_audit_and_dashboard_flow():
             "issued_to": "Vendor-X",
             "vendor_code": "VX",
             "notes": "For quote",
->>>>>>> main
         },
     )
     assert transmittal.status_code == 200
 
-<<<<<<< codex/build-edms-with-version-control-features-pzpgd9
     extended = client.get(
         "/documents/reports/dashboard-extended",
         headers=controller_headers,
@@ -346,7 +279,16 @@ def test_document_search_transmittal_audit_and_dashboard_flow():
     assert export_csv.status_code == 200
     assert export_csv.headers["content-type"].startswith("text/csv")
     assert "event_type" in export_csv.text
-=======
+
+    export_jsonl = client.get(
+        f"/documents/{doc_id}/audit-events/export-jsonl",
+        headers=controller_headers,
+    )
+    assert export_jsonl.status_code == 200
+    assert export_jsonl.headers["content-type"].startswith("application/x-ndjson")
+    assert '"event_type"' in export_jsonl.text
+
+    # keep these main-branch checks too
     audit = client.get(f"/documents/{doc_id}/audit-events")
     assert audit.status_code == 200
     assert len(audit.json()) >= 3
@@ -355,4 +297,4 @@ def test_document_search_transmittal_audit_and_dashboard_flow():
     assert summary.status_code == 200
     assert summary.json()["total_documents"] == 1
     assert summary.json()["total_transmittals"] == 1
->>>>>>> main
+

@@ -56,6 +56,7 @@ class CommitRequest(BaseModel):
     commit_message: str
     file_hash: str
     author_email: str
+    content_text: str | None = None
 
 
 class RevisionResponse(ORMResponseModel):
@@ -66,6 +67,7 @@ class RevisionResponse(ORMResponseModel):
     commit_message: str
     file_hash: str
     author_email: str
+    content_text: str | None
     is_pushed: bool
     created_at: datetime
 
@@ -171,3 +173,18 @@ class DashboardExtendedResponse(ORMResponseModel):
     total_documents: int
     status_breakdown: list[StatusBreakdownItem]
     discipline_breakdown: list[DisciplineBreakdownItem]
+
+
+class TextDiffResponse(ORMResponseModel):
+    document_id: int
+    from_revision_id: int
+    to_revision_id: int
+    diff: str
+
+
+class BackupSnapshotResponse(ORMResponseModel):
+    snapshot: dict[str, list[dict[str, Any]]]
+
+
+class RestoreSnapshotRequest(BaseModel):
+    snapshot: dict[str, list[dict[str, Any]]]

@@ -1,9 +1,11 @@
 import csv
+import difflib
+import json
 from datetime import datetime
 from io import StringIO
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlmodel import Session, col, or_, select
+from sqlmodel import Session, col, delete, or_, select
 
 from app.db import get_session
 from app.models import Approval, AuditEvent, Branch, Document, DocumentRevision, Transmittal
@@ -29,6 +31,9 @@ from app.schemas import (
     StatusBreakdownItem,
     SubmitForApprovalRequest,
     TransmittalResponse,
+    TextDiffResponse,
+    BackupSnapshotResponse,
+    RestoreSnapshotRequest,
 )
 from app.security import CurrentUser, get_current_user, require_roles
 
@@ -50,6 +55,18 @@ def record_audit_event(
             details=details,
         )
     )
+
+
+def _deserialize_datetimes(row: dict, fields: list[str]) -> dict:
+    parsed = dict(row)
+    for field in fields:
+        value = parsed.get(field)
+        if isinstance(value, str):
+            try:
+                parsed[field] = datetime.fromisoformat(value)
+            except ValueError:
+                pass
+    return parsed
 
 
 @router.post("", response_model=DocumentResponse, summary="Create document")
@@ -222,6 +239,7 @@ def commit_document_revision(
         commit_message=payload.commit_message,
         file_hash=payload.file_hash,
         author_email=str(payload.author_email),
+        content_text=payload.content_text,
     )
     session.add(revision)
     session.commit()
@@ -349,6 +367,48 @@ def compare_document_revisions(
         to_revision=to_revision,
         changed_fields=changed_fields,
         is_same_file=from_revision.file_hash == to_revision.file_hash,
+    )
+
+
+@router.get(
+    "/{document_id}/compare/text",
+    response_model=TextDiffResponse,
+    summary="Compare revision text content",
+)
+def compare_revision_text(
+    document_id: int,
+    from_revision_id: int,
+    to_revision_id: int,
+    session: Session = Depends(get_session),
+):
+    document = session.get(Document, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    from_revision = session.get(DocumentRevision, from_revision_id)
+    to_revision = session.get(DocumentRevision, to_revision_id)
+    if not from_revision or from_revision.document_id != document_id:
+        raise HTTPException(status_code=404, detail="From revision not found for document")
+    if not to_revision or to_revision.document_id != document_id:
+        raise HTTPException(status_code=404, detail="To revision not found for document")
+
+    from_lines = (from_revision.content_text or "").splitlines()
+    to_lines = (to_revision.content_text or "").splitlines()
+    diff = "\n".join(
+        difflib.unified_diff(
+            from_lines,
+            to_lines,
+            fromfile=f"rev-{from_revision.id}",
+            tofile=f"rev-{to_revision.id}",
+            lineterm="",
+        )
+    )
+
+    return TextDiffResponse(
+        document_id=document_id,
+        from_revision_id=from_revision_id,
+        to_revision_id=to_revision_id,
+        diff=diff,
     )
 
 
@@ -554,6 +614,104 @@ def export_audit_events_csv(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
+
+@router.get(
+    "/{document_id}/audit-events/export-jsonl",
+    summary="Export audit events as JSON Lines",
+)
+def export_audit_events_jsonl(
+    document_id: int,
+    session: Session = Depends(get_session),
+    _: CurrentUser = Depends(require_roles("document_controller", "approver")),
+):
+    document = session.get(Document, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    events = session.exec(
+        select(AuditEvent)
+        .where(AuditEvent.document_id == document_id)
+        .order_by(col(AuditEvent.id))
+    ).all()
+
+    lines = []
+    for event in events:
+        lines.append(
+            json.dumps(
+                {
+                    "id": event.id,
+                    "event_type": event.event_type,
+                    "actor_email": event.actor_email,
+                    "details": event.details,
+                    "created_at": event.created_at.isoformat(),
+                }
+            )
+        )
+
+    filename = f"audit_document_{document_id}.jsonl"
+    return Response(
+        content="\n".join(lines),
+        media_type="application/x-ndjson",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+
+
+@router.get(
+    "/admin/backup",
+    response_model=BackupSnapshotResponse,
+    summary="Create full MVP backup snapshot",
+)
+def create_backup_snapshot(
+    session: Session = Depends(get_session),
+    _: CurrentUser = Depends(require_roles("document_controller")),
+):
+    snapshot = {
+        "documents": [d.model_dump(mode="json") for d in session.exec(select(Document)).all()],
+        "branches": [b.model_dump(mode="json") for b in session.exec(select(Branch)).all()],
+        "revisions": [r.model_dump(mode="json") for r in session.exec(select(DocumentRevision)).all()],
+        "approvals": [a.model_dump(mode="json") for a in session.exec(select(Approval)).all()],
+        "transmittals": [t.model_dump(mode="json") for t in session.exec(select(Transmittal)).all()],
+        "audit_events": [e.model_dump(mode="json") for e in session.exec(select(AuditEvent)).all()],
+    }
+    return BackupSnapshotResponse(snapshot=snapshot)
+
+
+@router.post(
+    "/admin/restore",
+    summary="Restore full MVP backup snapshot",
+)
+def restore_backup_snapshot(
+    payload: RestoreSnapshotRequest,
+    session: Session = Depends(get_session),
+    _: CurrentUser = Depends(require_roles("document_controller")),
+):
+    snapshot = payload.snapshot
+
+    session.exec(delete(AuditEvent))
+    session.exec(delete(Transmittal))
+    session.exec(delete(Approval))
+    session.exec(delete(DocumentRevision))
+    session.exec(delete(Branch))
+    session.exec(delete(Document))
+    session.commit()
+
+    for row in snapshot.get("documents", []):
+        session.add(Document(**_deserialize_datetimes(row, ["created_at"])))
+    for row in snapshot.get("branches", []):
+        session.add(Branch(**_deserialize_datetimes(row, ["created_at"])))
+    for row in snapshot.get("revisions", []):
+        session.add(DocumentRevision(**_deserialize_datetimes(row, ["created_at"])))
+    for row in snapshot.get("approvals", []):
+        session.add(Approval(**_deserialize_datetimes(row, ["created_at", "decided_at"])))
+    for row in snapshot.get("transmittals", []):
+        session.add(Transmittal(**_deserialize_datetimes(row, ["created_at"])))
+    for row in snapshot.get("audit_events", []):
+        session.add(AuditEvent(**_deserialize_datetimes(row, ["created_at"])))
+
+    session.commit()
+    return {"status": "restored"}
 
 @router.get("/{document_id}/history", response_model=list[RevisionResponse], summary="Revision history")
 def get_document_history(document_id: int, session: Session = Depends(get_session)):
