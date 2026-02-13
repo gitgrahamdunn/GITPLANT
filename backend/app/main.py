@@ -2,12 +2,11 @@ from fastapi import FastAPI
 
 from app.config import settings
 from app.db import init_db
-from app.routers import auth, documents, health
+from app.routers import auth, health
 
 app = FastAPI(title=settings.app_name)
 app.include_router(health.router)
 app.include_router(auth.router)
-app.include_router(documents.router)
 
 
 @app.on_event("startup")
