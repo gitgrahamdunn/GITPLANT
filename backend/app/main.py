@@ -15,20 +15,17 @@ app.include_router(documents.router)
 
 @app.middleware("http")
 async def hardening_middleware(request: Request, call_next):
-    request_id = str(uuid.uuid4())
+    start = time.perf_counter()
     response = await call_next(request)
     duration_ms = round((time.perf_counter() - start) * 1000, 2)
-
-    response.headers["X-Request-ID"] = request_id
-    response.headers["X-Response-Time-Ms"] = str(duration_ms)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Process-Time-ms"] = str(duration_ms)
     return response
 
 
 @app.on_event("startup")
 def on_startup() -> None:
+    pass
+
 
 @app.get("/", tags=["root"])
 def read_root():
