@@ -49,6 +49,16 @@ This repository now contains the **Week 1–8 project foundation** for an oil & 
 4. Open docs:
    - http://127.0.0.1:8000/docs
 
+5. Run frontend:
+   ```bash
+   cd frontend
+   npm install
+   cp .env.example .env
+   npm run dev
+   ```
+6. Open frontend:
+   - http://127.0.0.1:5173
+
 
 ## Week 11–12 MVP completion highlights
 - `GET /health/live` and `GET /health/ready`
