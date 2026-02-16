@@ -1,10 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import {
-  downloadDocumentPdf,
-  pullDocumentForRevision,
-  searchDocuments,
-} from "../api";
-import type { SearchDocument } from "../types";
+import { downloadDocumentPdf, searchDocuments } from "../api";
+import type { ProjectSummary, SearchDocument } from "../types";
 import Banner from "./ui/Banner";
 import Button from "./ui/Button";
 import Card from "./ui/Card";
@@ -14,10 +10,9 @@ interface DocumentSearchPanelProps {
   token: string;
   refreshKey?: number;
   createdDocuments?: SearchDocument[];
-  onPullForProject: (
-    documentIds: number[],
-    projectNumber: string,
-  ) => Promise<void>;
+  activeProjects: ProjectSummary[];
+  onPullForProject: (documentIds: number[], projectId: string) => Promise<void>;
+  onCreateProjectCta: () => void;
 }
 
 type SortField = "document_number" | "title" | "status";
@@ -38,7 +33,9 @@ export default function DocumentSearchPanel({
   token,
   refreshKey = 0,
   createdDocuments = [],
+  activeProjects,
   onPullForProject,
+  onCreateProjectCta,
 }: DocumentSearchPanelProps): JSX.Element {
   const [query, setQuery] = useState("");
   const [documents, setDocuments] = useState<SearchDocument[]>([]);
@@ -47,9 +44,10 @@ export default function DocumentSearchPanel({
   const [sortField, setSortField] = useState<SortField>("document_number");
   const [sortAscending, setSortAscending] = useState(true);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [projectNumber, setProjectNumber] = useState("");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showPullModal, setShowPullModal] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
 
   const mergedDocuments = useMemo(
     () => mergeDocuments(documents, createdDocuments),
@@ -100,22 +98,6 @@ export default function DocumentSearchPanel({
     void loadDocuments(query);
   }
 
-  async function handlePullForRevision(documentId: number): Promise<void> {
-    setError(null);
-    setActionMessage(null);
-
-    try {
-      const pulled = await pullDocumentForRevision(token, documentId);
-      setActionMessage(pulled.message);
-    } catch (actionError) {
-      setError(
-        actionError instanceof Error
-          ? actionError.message
-          : "Failed to pull document for revision",
-      );
-    }
-  }
-
   async function openPdf(documentId: number): Promise<void> {
     setError(null);
 
@@ -141,27 +123,25 @@ export default function DocumentSearchPanel({
     );
   }
 
-  async function pullSelectedForProject(): Promise<void> {
-    if (!selectedIds.length) {
-      setError("Select one or more documents first.");
-      return;
-    }
-    if (!projectNumber.trim()) {
-      setError("Project Number is required.");
+  async function confirmPull(): Promise<void> {
+    if (!selectedIds.length || !selectedProjectId) {
+      setError("Select at least one document and an ACTIVE project.");
       return;
     }
 
     setError(null);
-    await onPullForProject(selectedIds, projectNumber.trim());
+    await onPullForProject(selectedIds, selectedProjectId);
     setSelectedIds([]);
-    setProjectNumber("");
-    setActionMessage(
-      `Pulled ${selectedIds.length} document(s) to ${projectNumber}.`,
-    );
+    setSelectedProjectId("");
+    setShowPullModal(false);
+    setActionMessage("Pulled selected documents into project.");
   }
 
   return (
-    <Card title="Documents" subtitle="Search, sort, and review uploaded files.">
+    <Card
+      title="Documents (Plant)"
+      subtitle="View Plant documents and pull them into ACTIVE projects."
+    >
       <form className="inline-form" onSubmit={handleSubmit}>
         <input
           className="input"
@@ -175,18 +155,20 @@ export default function DocumentSearchPanel({
       </form>
 
       <div className="inline-form">
-        <label className="field-label">
-          <span>Project Number (for pull)</span>
-          <input
-            className="input"
-            placeholder="PRJ-2417"
-            value={projectNumber}
-            onChange={(event) => setProjectNumber(event.target.value)}
-          />
-        </label>
-        <Button type="button" onClick={() => void pullSelectedForProject()}>
-          Pull selected for project
-        </Button>
+        {activeProjects.length ? (
+          <Button type="button" onClick={() => setShowPullModal(true)}>
+            Pull selected to project
+          </Button>
+        ) : (
+          <>
+            <Button type="button" disabled>
+              Pull selected to project
+            </Button>
+            <Button type="button" variant="secondary" onClick={onCreateProjectCta}>
+              Create a project first
+            </Button>
+          </>
+        )}
       </div>
 
       <div className="inline-form">
@@ -220,7 +202,7 @@ export default function DocumentSearchPanel({
       {!isLoading && !sortedDocuments.length ? (
         <Banner
           tone="info"
-          message="No documents found. Upload a PDF to get started."
+          message="No Plant documents found. Use Plant Upload to create records."
         />
       ) : null}
 
@@ -236,7 +218,7 @@ export default function DocumentSearchPanel({
                 <th>Discipline</th>
                 <th>Status</th>
                 <th>Plant revision</th>
-                <th>Projects</th>
+                <th>Pulled into projects</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -258,35 +240,15 @@ export default function DocumentSearchPanel({
                   <td>{document.current_revision}</td>
                   <td>{document.active_project_count ?? 0}</td>
                   <td>
-                    <div className="table-actions">
-                      <button
-                        type="button"
-                        className="subtle-button"
-                        onClick={() => {
-                          setSelectedIds([document.id]);
-                        }}
-                      >
-                        Select
-                      </button>
-                      <button
-                        type="button"
-                        className="subtle-button"
-                        onClick={() => {
-                          void handlePullForRevision(document.id);
-                        }}
-                      >
-                        Pull for revision
-                      </button>
-                      <button
-                        type="button"
-                        className="subtle-button"
-                        onClick={() => {
-                          void openPdf(document.id);
-                        }}
-                      >
-                        Open PDF
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      className="subtle-button"
+                      onClick={() => {
+                        void openPdf(document.id);
+                      }}
+                    >
+                      Open PDF
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -303,6 +265,41 @@ export default function DocumentSearchPanel({
         >
           Load more
         </Button>
+      ) : null}
+
+      {showPullModal ? (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal-card" role="dialog" aria-modal="true">
+            <h3>Pull to project</h3>
+            <p className="hint">Choose an ACTIVE project for selected documents.</p>
+            <label className="field-label">
+              <span>Active Project</span>
+              <select
+                value={selectedProjectId}
+                onChange={(event) => setSelectedProjectId(event.target.value)}
+              >
+                <option value="">Select project</option>
+                {activeProjects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.project_number} {project.name ? `- ${project.name}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="table-actions">
+              <Button type="button" onClick={() => void confirmPull()}>
+                Confirm Pull
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setShowPullModal(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </Card>
   );

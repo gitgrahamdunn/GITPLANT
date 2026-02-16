@@ -1,8 +1,8 @@
 from datetime import datetime
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlmodel import Session, col, select
 
+from app.config import BACKEND_ROOT
 from app.db import get_session
 from app.models import (
     AuditEvent,
@@ -21,6 +21,7 @@ from app.schemas import (
     ProjectPullResponse,
     ProjectSummaryResponse,
     ProjectWorkingRevisionResponse,
+    ProjectWorkingUploadResponse,
     WorkingRevisionStatusResponse,
 )
 from app.security import CurrentUser, require_roles
@@ -28,6 +29,8 @@ from app.security import CurrentUser, require_roles
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 ACTIVE_WORKING_STATUSES = {"WORKING", "READY"}
+WORKING_STORAGE_DIR = (BACKEND_ROOT / "storage" / "projects").resolve()
+WORKING_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _to_working_response(
@@ -85,6 +88,13 @@ def _get_project_by_number(session: Session, project_number: str) -> Project:
     return project
 
 
+def _get_project_by_id(session: Session, project_id: str) -> Project:
+    project = session.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
 @router.post("", response_model=ProjectSummaryResponse)
 def create_project(
     payload: ProjectCreateRequest,
@@ -112,12 +122,15 @@ def create_project(
 
 @router.get("", response_model=list[ProjectSummaryResponse])
 def list_projects(
+    status: str | None = Query(default=None),
     session: Session = Depends(get_session),
     _: CurrentUser = Depends(require_roles("user")),
 ):
-    projects = session.exec(
-        select(Project).order_by(col(Project.created_at).desc())
-    ).all()
+    query = select(Project)
+    if status:
+        query = query.where(Project.status == status.upper())
+
+    projects = session.exec(query.order_by(col(Project.created_at).desc())).all()
     responses: list[ProjectSummaryResponse] = []
     for project in projects:
         working_count = session.exec(
@@ -160,21 +173,16 @@ def get_project_detail(
     return ProjectDetailResponse(**project.model_dump(), working_docs=working_docs)
 
 
-@router.post("/{project_number}/pull", response_model=ProjectPullResponse)
+@router.post("/{project_id}/pull", response_model=ProjectPullResponse)
 def pull_documents_for_project(
-    project_number: str,
+    project_id: str,
     payload: ProjectPullRequest,
     session: Session = Depends(get_session),
     current_user: CurrentUser = Depends(require_roles("user")),
 ):
-    project = session.exec(
-        select(Project).where(Project.project_number == project_number)
-    ).first()
-    if not project:
-        project = Project(project_number=project_number, created_by=current_user.email)
-        session.add(project)
-        session.commit()
-        session.refresh(project)
+    project = _get_project_by_id(session, project_id)
+    if project.status != "ACTIVE":
+        raise HTTPException(status_code=409, detail="Only ACTIVE projects can pull")
 
     document_ids: set[int] = set()
     if payload.document_id is not None:
@@ -243,6 +251,54 @@ def pull_documents_for_project(
         project_number=project.project_number,
         created=created,
         skipped_document_ids=skipped,
+    )
+
+
+@router.post(
+    "/{project_id}/working/{working_revision_id}/upload",
+    response_model=ProjectWorkingUploadResponse,
+)
+def upload_working_revision_file(
+    project_id: str,
+    working_revision_id: int,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(require_roles("user")),
+):
+    project = _get_project_by_id(session, project_id)
+    working = session.get(ProjectWorkingRevision, working_revision_id)
+    if not working or working.project_id != project.id:
+        raise HTTPException(status_code=404, detail="Working revision not found for project")
+    if working.status in {"MERGED", "ABANDONED"}:
+        raise HTTPException(status_code=409, detail="Working revision is immutable")
+
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+    destination = WORKING_STORAGE_DIR / f"{project.id}-{working.id}.pdf"
+    file.file.seek(0)
+    destination.write_bytes(file.file.read())
+
+    working.file_path = str(destination)
+    working.notes = f"Working upload by {current_user.email}"
+    working.updated_at = datetime.utcnow()
+    session.add(working)
+
+    session.add(
+        AuditEvent(
+            document_id=working.document_id,
+            event_type="project_working_upload",
+            actor_email=current_user.email,
+            details=f"Uploaded working revision file for {project.project_number} item {working.id}",
+        )
+    )
+    session.commit()
+
+    return ProjectWorkingUploadResponse(
+        id=working.id,
+        file_path=working.file_path,
+        updated_at=working.updated_at,
     )
 
 

@@ -59,13 +59,25 @@ def test_project_working_set_pull_ready_merge_flow():
     doc1_id = _create_document(headers, "DOC-001")
     doc2_id = _create_document(headers, "DOC-002")
 
+    project_create = client.post(
+        "/projects",
+        headers=headers,
+        json={"project_number": "PRJ-100", "name": "Test"},
+    )
+    assert project_create.status_code == 200
+    project_id = project_create.json()["id"]
+
     pull = client.post(
-        "/projects/PRJ-100/pull",
+        f"/projects/{project_id}/pull",
         headers=headers,
         json={"document_ids": [doc1_id, doc2_id]},
     )
     assert pull.status_code == 200
     assert len(pull.json()["created"]) == 2
+
+    active_projects = client.get("/projects?status=ACTIVE", headers=headers)
+    assert active_projects.status_code == 200
+    assert len(active_projects.json()) == 1
 
     projects_summary = client.get("/projects", headers=headers)
     assert projects_summary.status_code == 200
@@ -82,13 +94,13 @@ def test_project_working_set_pull_ready_merge_flow():
         for item in detail.json()["working_docs"]
         if item["document_number"] == "DOC-001"
     )
-    doc2_working = next(
-        item
-        for item in detail.json()["working_docs"]
-        if item["document_number"] == "DOC-002"
+
+    upload = client.post(
+        f"/projects/{project_id}/working/{doc1_working['id']}/upload",
+        headers=headers,
+        files={"file": ("updated.pdf", b"%PDF-1.4 project content", "application/pdf")},
     )
-    assert doc1_working["status"] == "WORKING"
-    assert doc2_working["status"] == "WORKING"
+    assert upload.status_code == 200
 
     ready = client.post(
         f"/projects/PRJ-100/working/{doc1_working['id']}/ready",
@@ -101,6 +113,13 @@ def test_project_working_set_pull_ready_merge_flow():
     assert merge.status_code == 200
     assert merge.json()["merged_count"] == 1
     assert merge.json()["merged_items"][0]["document_number"] == "DOC-001"
+
+    plant_upload = client.post(
+        f"/documents/{doc2_id}/plant/upload",
+        headers=headers,
+        files={"file": ("plant.pdf", b"%PDF-1.4 plant content", "application/pdf")},
+    )
+    assert plant_upload.status_code == 200
 
     documents = client.get("/documents", headers=headers)
     assert documents.status_code == 200
@@ -115,7 +134,7 @@ def test_project_working_set_pull_ready_merge_flow():
         if item["document_number"] == "DOC-002"
     )
     assert doc1["current_revision"] != "A"
-    assert doc2["current_revision"] == "A"
+    assert doc2["current_revision"] != "A"
 
     detail_after = client.get("/projects/PRJ-100", headers=headers)
     doc1_after = next(
@@ -123,13 +142,7 @@ def test_project_working_set_pull_ready_merge_flow():
         for item in detail_after.json()["working_docs"]
         if item["document_number"] == "DOC-001"
     )
-    doc2_after = next(
-        item
-        for item in detail_after.json()["working_docs"]
-        if item["document_number"] == "DOC-002"
-    )
     assert doc1_after["status"] == "MERGED"
-    assert doc2_after["status"] == "WORKING"
 
     audit_events = client.get(f"/documents/{doc1_id}/audit-events")
     assert audit_events.status_code == 200

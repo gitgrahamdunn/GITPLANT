@@ -6,10 +6,12 @@ import type {
   LoginResponse,
   MeResponse,
   DashboardSummary,
+  ProjectCreateRequest,
   ProjectDetail,
   ProjectMergeResponse,
   ProjectPullResponse,
   ProjectSummary,
+  ProjectWorkingUploadResponse,
   PullForRevisionResponse,
   SearchDocument,
   WorkingRevisionStatusResponse,
@@ -191,6 +193,23 @@ export async function uploadPdfDocuments(
   });
 }
 
+export async function uploadPlantRevision(
+  token: string,
+  documentId: number,
+  file: File,
+): Promise<SearchDocument> {
+  const payload = new FormData();
+  payload.append("file", file, file.name);
+
+  return requestForm<SearchDocument>(`/documents/${documentId}/plant/upload`, {
+    method: "POST",
+    headers: {
+      ...getAuthHeaders(token),
+    },
+    body: payload,
+  });
+}
+
 export async function pullDocumentForRevision(
   token: string,
   documentId: number,
@@ -208,12 +227,9 @@ export async function downloadDocumentPdf(
   token: string,
   documentId: number,
 ): Promise<Blob> {
-  const response = await fetch(
-    buildApiUrl(`/documents/${documentId}/download`),
-    {
-      headers: getAuthHeaders(token),
-    },
-  );
+  const response = await fetch(buildApiUrl(`/documents/${documentId}/download`), {
+    headers: getAuthHeaders(token),
+  });
 
   if (!response.ok) {
     let message = `Request failed with ${response.status}`;
@@ -235,8 +251,23 @@ export async function downloadDocumentPdf(
   return response.blob();
 }
 
-export async function listProjects(token: string): Promise<ProjectSummary[]> {
-  return request<ProjectSummary[]>("/projects", {
+export async function createProject(
+  token: string,
+  payload: ProjectCreateRequest,
+): Promise<ProjectSummary> {
+  return request<ProjectSummary>("/projects", {
+    method: "POST",
+    headers: { ...getAuthHeaders(token) },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listProjects(
+  token: string,
+  status?: string,
+): Promise<ProjectSummary[]> {
+  const suffix = status ? `?status=${encodeURIComponent(status)}` : "";
+  return request<ProjectSummary[]>(`/projects${suffix}`, {
     headers: { ...getAuthHeaders(token) },
   });
 }
@@ -252,14 +283,33 @@ export async function getProjectDetail(
 
 export async function pullDocumentsForProject(
   token: string,
-  projectNumber: string,
+  projectId: string,
   documentIds: number[],
 ): Promise<ProjectPullResponse> {
-  return request<ProjectPullResponse>(`/projects/${projectNumber}/pull`, {
+  return request<ProjectPullResponse>(`/projects/${projectId}/pull`, {
     method: "POST",
     headers: { ...getAuthHeaders(token) },
     body: JSON.stringify({ document_ids: documentIds }),
   });
+}
+
+export async function uploadProjectWorkingRevision(
+  token: string,
+  projectId: string,
+  workingRevisionId: number,
+  file: File,
+): Promise<ProjectWorkingUploadResponse> {
+  const payload = new FormData();
+  payload.append("file", file, file.name);
+
+  return requestForm<ProjectWorkingUploadResponse>(
+    `/projects/${projectId}/working/${workingRevisionId}/upload`,
+    {
+      method: "POST",
+      headers: { ...getAuthHeaders(token) },
+      body: payload,
+    },
+  );
 }
 
 export async function markWorkingReady(

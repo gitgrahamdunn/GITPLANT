@@ -268,6 +268,33 @@ def create_document(
     return _to_document_response(document)
 
 
+
+
+def _get_or_create_plant_branch(session: Session, document_id: int) -> Branch:
+    branch = session.exec(
+        select(Branch).where(Branch.document_id == document_id, Branch.name == "plant")
+    ).first()
+    if branch:
+        return branch
+
+    branch = Branch(document_id=document_id, name="plant")
+    session.add(branch)
+    session.commit()
+    session.refresh(branch)
+    return branch
+
+
+def _next_revision(current_revision: str) -> str:
+    cleaned = (current_revision or "A").strip().upper()
+    if len(cleaned) == 1 and "A" <= cleaned <= "Y":
+        return chr(ord(cleaned) + 1)
+    if cleaned == "Z":
+        return "AA"
+    if cleaned == "AA":
+        return "AB"
+    if len(cleaned) == 2 and cleaned[0] == "A" and "A" <= cleaned[1] <= "Y":
+        return f"A{chr(ord(cleaned[1]) + 1)}"
+    return f"{cleaned}-NEXT"
 def _document_pdf_path(document_id: int) -> Path:
     return DOCUMENT_STORAGE_DIR / f"{document_id}.pdf"
 
@@ -340,6 +367,58 @@ def create_documents_from_pdf_upload(
         total_created=len(created_documents), items=created_documents
     )
 
+
+
+
+@router.post(
+    "/{document_id}/plant/upload",
+    response_model=DocumentResponse,
+    summary="Upload new Plant revision PDF",
+)
+def upload_plant_revision(
+    document_id: int,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(require_roles("user")),
+):
+    document = session.get(Document, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+    next_revision = _next_revision(document.current_revision)
+    destination = _document_pdf_path(document_id)
+    file.file.seek(0)
+    destination.write_bytes(file.file.read())
+
+    plant_branch = _get_or_create_plant_branch(session, document_id)
+    plant_revision = DocumentRevision(
+        document_id=document.id,
+        branch_id=plant_branch.id,
+        revision=next_revision,
+        commit_message=f"Plant upload from {current_user.email}",
+        file_hash=f"plant-upload-{document.id}-{int(datetime.utcnow().timestamp())}",
+        author_email=current_user.email,
+        is_pushed=True,
+    )
+    session.add(plant_revision)
+
+    document.current_revision = next_revision
+    session.add(document)
+
+    record_audit_event(
+        session,
+        document.id,
+        "plant_upload",
+        current_user.email,
+        f"Uploaded new plant revision {next_revision} for {document.document_number}",
+    )
+    session.commit()
+
+    return _to_document_response(document)
 
 @router.post(
     "/{document_id}/pull-for-revision",
