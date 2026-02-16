@@ -41,6 +41,12 @@ class DocumentResponse(ORMResponseModel):
     current_revision: str
 
 
+
+
+class DocumentBatchCreateResponse(ORMResponseModel):
+    total_created: int
+    items: list[DocumentResponse]
+
 class BranchCreateRequest(BaseModel):
     name: str
 

@@ -1,5 +1,5 @@
 import { ChangeEvent, DragEvent, FormEvent, useMemo, useRef, useState } from 'react';
-import { createDocument } from '../api';
+import { uploadPdfDocuments } from '../api';
 import type { SearchDocument } from '../types';
 
 interface DocumentCreatePanelProps {
@@ -7,26 +7,10 @@ interface DocumentCreatePanelProps {
   onCreated: (document: SearchDocument) => void;
 }
 
-function toDocumentNumber(fileName: string, index: number): string {
-  const base = fileName.replace(/\.pdf$/i, '').trim();
-  const normalized = base
-    .replace(/[^a-zA-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .toUpperCase();
-
-  if (!normalized) {
-    return `PDF-${Date.now()}-${index + 1}`;
-  }
-
-  return normalized;
-}
-
-function toTitle(fileName: string): string {
-  return fileName.replace(/\.pdf$/i, '').trim() || 'Untitled PDF document';
-}
-
 function filterPdfFiles(fileList: FileList | File[]): File[] {
-  return Array.from(fileList).filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
+  return Array.from(fileList).filter(
+    (file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+  );
 }
 
 export default function DocumentCreatePanel({ token, onCreated }: DocumentCreatePanelProps): JSX.Element {
@@ -43,7 +27,7 @@ export default function DocumentCreatePanel({ token, onCreated }: DocumentCreate
   const totalFileSizeLabel = useMemo(() => {
     const bytes = files.reduce((sum, file) => sum + file.size, 0);
     if (bytes < 1024 * 1024) {
-      return `${Math.round(bytes / 1024)} KB`;
+      return `${Math.max(1, Math.round(bytes / 1024))} KB`;
     }
 
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
@@ -58,7 +42,12 @@ export default function DocumentCreatePanel({ token, onCreated }: DocumentCreate
     setError(null);
     setSuccessMessage(null);
     setFiles((existing) => {
-      const incoming = newFiles.filter((newFile) => !existing.some((currentFile) => currentFile.name === newFile.name && currentFile.size === newFile.size));
+      const incoming = newFiles.filter(
+        (newFile) =>
+          !existing.some(
+            (currentFile) => currentFile.name === newFile.name && currentFile.size === newFile.size
+          )
+      );
       return [...existing, ...incoming];
     });
   }
@@ -94,26 +83,26 @@ export default function DocumentCreatePanel({ token, onCreated }: DocumentCreate
 
     setIsSubmitting(true);
 
-    let createdCount = 0;
-    for (const [index, file] of files.entries()) {
-      try {
-        const created = await createDocument(token, {
-          project_code: projectCode,
-          document_number: toDocumentNumber(file.name, index),
-          title: toTitle(file.name),
-          discipline,
-        });
-        onCreated(created);
-        createdCount += 1;
-      } catch (submitError) {
-        setError(submitError instanceof Error ? submitError.message : 'Failed to create documents from selected PDFs');
-        break;
-      }
-    }
+    try {
+      const payload = new FormData();
+      payload.append('project_code', projectCode);
+      payload.append('discipline', discipline);
+      files.forEach((file) => {
+        payload.append('files', file, file.name);
+      });
 
-    if (createdCount > 0) {
-      setSuccessMessage(`Created ${createdCount} document record(s) from PDF selection.`);
-      setFiles((existing) => existing.slice(createdCount));
+      const result = await uploadPdfDocuments(token, payload);
+      result.items.forEach((document) => onCreated(document));
+      setSuccessMessage(`Created ${result.total_created} document record(s) from PDF selection.`);
+      setFiles([]);
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : 'Failed to create documents from selected PDFs'
+      );
+    } finally {
+      setIsSubmitting(false);
     }
 
     setIsSubmitting(false);
@@ -122,7 +111,10 @@ export default function DocumentCreatePanel({ token, onCreated }: DocumentCreate
   return (
     <section className="card">
       <h2>Add documents (PDF)</h2>
-      <p className="hint">Drag & drop PDF files or pick from your folders. The app creates document records from file names.</p>
+      <p className="hint">
+        Drag & drop PDF files or pick from your folders. Files are sent to the backend as
+        multipart uploads.
+      </p>
 
       <form onSubmit={handleSubmit} className="stack">
         <div className="field-grid">
