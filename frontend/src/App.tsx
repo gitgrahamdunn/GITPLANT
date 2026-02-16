@@ -59,8 +59,8 @@ export default function App(): JSX.Element {
   return (
     <main className="container">
       <header>
-        <h1>GitPlant EDMS Frontend</h1>
-        <p className="hint">React + Vite client for auth, dashboard summary, and document search.</p>
+        <h1>GitPlant EDMS</h1>
+        <p className="hint">Modern document control UI with PDF-first intake, dashboard metrics, and search.</p>
       </header>
 
       {!isAuthed ? <LoginPanel onToken={setToken} /> : null}
