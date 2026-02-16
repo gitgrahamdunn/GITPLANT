@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  createProject,
   fetchDashboard,
   fetchMe,
   getProjectDetail,
+  listDocuments,
   listProjects,
   pullDocumentsForProject,
   resetDemoData,
   seedDemoData,
 } from "./api";
 import DashboardPanel from "./components/DashboardPanel";
-import DocumentCreatePanel from "./components/DocumentCreatePanel";
 import DocumentSearchPanel from "./components/DocumentSearchPanel";
 import LoginPanel from "./components/LoginPanel";
+import PlantUploadPanel from "./components/PlantUploadPanel";
 import ProjectDetailPanel from "./components/ProjectDetailPanel";
 import ProjectsSummaryPanel from "./components/ProjectsSummaryPanel";
 import Button from "./components/ui/Button";
@@ -21,6 +23,7 @@ import Toast from "./components/ui/Toast";
 import type {
   DashboardSummary,
   MeResponse,
+  ProjectCreateRequest,
   ProjectDetail,
   ProjectSummary,
   SearchDocument,
@@ -28,7 +31,7 @@ import type {
 
 const STORAGE_KEY = "gitplant.token";
 
-type NavSection = "dashboard" | "projects" | "documents" | "upload" | "audit";
+type NavSection = "dashboard" | "projects" | "documents" | "plant_upload";
 
 export default function App(): JSX.Element {
   const [token, setToken] = useState<string | null>(() =>
@@ -37,6 +40,8 @@ export default function App(): JSX.Element {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [activeProjects, setActiveProjects] = useState<ProjectSummary[]>([]);
+  const [documents, setDocuments] = useState<SearchDocument[]>([]);
   const [activeProjectNumber, setActiveProjectNumber] = useState<string | null>(
     null,
   );
@@ -52,13 +57,22 @@ export default function App(): JSX.Element {
   const isAuthed = useMemo(() => Boolean(token && me), [token, me]);
 
   async function refreshProjects(authToken: string): Promise<void> {
-    const allProjects = await listProjects(authToken);
+    const [allProjects, activeOnly] = await Promise.all([
+      listProjects(authToken),
+      listProjects(authToken, "ACTIVE"),
+    ]);
     setProjects(allProjects);
+    setActiveProjects(activeOnly);
 
     if (activeProjectNumber) {
       const detail = await getProjectDetail(authToken, activeProjectNumber);
       setActiveProject(detail);
     }
+  }
+
+  async function refreshDocuments(authToken: string): Promise<void> {
+    const result = await listDocuments(authToken);
+    setDocuments(result.items);
   }
 
   useEffect(() => {
@@ -75,6 +89,8 @@ export default function App(): JSX.Element {
       setMe(null);
       setSummary(null);
       setProjects([]);
+      setActiveProjects([]);
+      setDocuments([]);
       setActiveProjectNumber(null);
       setActiveProject(null);
       localStorage.removeItem(STORAGE_KEY);
@@ -94,7 +110,7 @@ export default function App(): JSX.Element {
         ]);
         setMe(profile);
         setSummary(dashboard);
-        await refreshProjects(authToken);
+        await Promise.all([refreshProjects(authToken), refreshDocuments(authToken)]);
       } catch (loadError) {
         setError(
           loadError instanceof Error
@@ -119,6 +135,19 @@ export default function App(): JSX.Element {
     const detail = await getProjectDetail(token, projectNumber);
     setActiveProject(detail);
     setActiveSection("projects");
+  }
+
+  async function handleCreateProject(payload: ProjectCreateRequest): Promise<void> {
+    if (!token) {
+      return;
+    }
+
+    const created = await createProject(token, payload);
+    await refreshProjects(token);
+    setActiveProjectNumber(created.project_number);
+    setActiveProject(await getProjectDetail(token, created.project_number));
+    setActiveSection("projects");
+    setToast(`Project ${created.project_number} created.`);
   }
 
   function handleLogout(): void {
@@ -153,7 +182,7 @@ export default function App(): JSX.Element {
       );
       const dashboard = await fetchDashboard(token);
       setSummary(dashboard);
-      await refreshProjects(token);
+      await Promise.all([refreshProjects(token), refreshDocuments(token)]);
     } catch (demoError) {
       setError(
         demoError instanceof Error ? demoError.message : "Demo action failed",
@@ -165,13 +194,13 @@ export default function App(): JSX.Element {
 
   async function handlePullForProject(
     documentIds: number[],
-    projectNumber: string,
+    projectId: string,
   ): Promise<void> {
     if (!token) {
       return;
     }
 
-    const result = await pullDocumentsForProject(token, projectNumber, documentIds);
+    const result = await pullDocumentsForProject(token, projectId, documentIds);
     await refreshProjects(token);
     const skipped = result.skipped_document_ids.length;
     setToast(
@@ -180,6 +209,7 @@ export default function App(): JSX.Element {
     setActiveProjectNumber(result.project_number);
     setActiveProject(await getProjectDetail(token, result.project_number));
     setActiveSection("projects");
+    setSearchRefreshKey((value) => value + 1);
   }
 
   async function refreshActiveProject(): Promise<void> {
@@ -188,6 +218,7 @@ export default function App(): JSX.Element {
     }
 
     setActiveProject(await getProjectDetail(token, activeProjectNumber));
+    await refreshProjects(token);
   }
 
   async function handleProjectMerged(): Promise<void> {
@@ -195,27 +226,26 @@ export default function App(): JSX.Element {
       return;
     }
 
-    await refreshProjects(token);
-    setSummary(await fetchDashboard(token));
+    await Promise.all([
+      refreshProjects(token),
+      refreshDocuments(token),
+      fetchDashboard(token).then(setSummary),
+    ]);
     setSearchRefreshKey((value) => value + 1);
     setToast("Project merged into plant revisions.");
   }
 
-  function handleDocumentCreated(document: SearchDocument): void {
+  function handleDocumentUpdated(document: SearchDocument): void {
     setSearchRefreshKey((value) => value + 1);
     setCreatedDocuments((existing) => [
       document,
       ...existing.filter((item) => item.id !== document.id),
     ]);
-    setSummary((existing) =>
-      existing
-        ? {
-            ...existing,
-            total_documents: existing.total_documents + 1,
-          }
-        : existing,
-    );
-    setToast("Document record created successfully.");
+    setDocuments((existing) => [
+      document,
+      ...existing.filter((item) => item.id !== document.id),
+    ]);
+    setToast("Plant revision uploaded successfully.");
   }
 
   return (
@@ -227,9 +257,8 @@ export default function App(): JSX.Element {
           {[
             ["dashboard", "Dashboard"],
             ["projects", "Projects"],
-            ["documents", "Documents"],
-            ["upload", "Upload PDFs"],
-            ["audit", "Audit"],
+            ["documents", "Documents (Plant)"],
+            ["plant_upload", "Plant Upload"],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -298,9 +327,10 @@ export default function App(): JSX.Element {
               <DashboardPanel summary={summary} />
             ) : null}
 
-            {(activeSection === "dashboard" || activeSection === "projects") && (
+            {activeSection === "projects" && (
               <ProjectsSummaryPanel
                 projects={projects}
+                onCreateProject={handleCreateProject}
                 onOpenProject={(projectNumber) => {
                   void openProject(projectNumber);
                 }}
@@ -316,16 +346,22 @@ export default function App(): JSX.Element {
               />
             ) : null}
 
-            {(activeSection === "upload" || activeSection === "documents") && (
-              <DocumentCreatePanel token={token!} onCreated={handleDocumentCreated} />
-            )}
-
-            {(activeSection === "documents" || activeSection === "audit") && (
+            {activeSection === "documents" && (
               <DocumentSearchPanel
                 token={token!}
                 refreshKey={searchRefreshKey}
                 createdDocuments={createdDocuments}
+                activeProjects={activeProjects}
+                onCreateProjectCta={() => setActiveSection("projects")}
                 onPullForProject={handlePullForProject}
+              />
+            )}
+
+            {activeSection === "plant_upload" && (
+              <PlantUploadPanel
+                token={token!}
+                documents={documents}
+                onUploaded={handleDocumentUpdated}
               />
             )}
           </>

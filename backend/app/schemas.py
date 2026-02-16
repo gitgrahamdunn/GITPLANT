@@ -258,6 +258,12 @@ class ProjectPullRequest(BaseModel):
     document_id: int | None = None
 
 
+class ProjectWorkingUploadResponse(ORMResponseModel):
+    id: int
+    file_path: str
+    updated_at: datetime
+
+
 class ProjectPullResponse(ORMResponseModel):
     project_number: str
     created: list[ProjectWorkingRevisionResponse]

@@ -73,6 +73,12 @@ export interface ProjectSummary {
   working_doc_count: number;
 }
 
+export interface ProjectCreateRequest {
+  project_number: string;
+  name?: string;
+  description?: string;
+}
+
 export interface ProjectWorkingDoc {
   id: number;
   project_id: string;
@@ -107,6 +113,12 @@ export interface ProjectPullResponse {
 export interface WorkingRevisionStatusResponse {
   id: number;
   status: string;
+  updated_at: string;
+}
+
+export interface ProjectWorkingUploadResponse {
+  id: number;
+  file_path: string;
   updated_at: string;
 }
 

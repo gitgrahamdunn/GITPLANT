@@ -30,8 +30,9 @@ GitPlant is a document-control MVP for engineering teams. It includes a FastAPI 
 ### Frontend (React + Vite)
 - Sign-in UI for demo account.
 - Dashboard summary cards.
-- Upload PDFs to create documents.
-- Search and manage existing documents.
+- Documents (Plant) view with active-project pull workflow guardrails.
+- Projects workspace with Working/Ready/Merged actions and merge confirmation.
+- Dedicated Plant Upload page separate from project working uploads.
 
 ## Repository layout
 
@@ -104,41 +105,44 @@ When `ENABLE_DEMO_TOOLS=true`, the frontend enables:
 > ⚠️ These controls are intended for local/dev workflows only and should stay disabled in production.
 
 
-## Project workflow (pull/merge)
+## EDMS workflow (Plant vs Project)
 
-GitPlant now supports a **Project Working Set** flow that maps directly to Git concepts:
+The enforced workflow is now:
 
-- **Plant** = main branch (authoritative current revisions)
-- **Project** = branch/workspace
-- **Pull for project** = checkout into a project workspace
-- **Merge to Plant** = promote READY working revisions to Plant
+1. **Create Project** (required `project_number`)
+2. **Pull Documents into Project** (ACTIVE projects only)
+3. **Edit outside system scope**
+4. **Upload working revision in Project**
+5. **Mark READY + Push to Plant**
 
-### API endpoints
+### Roles and upload boundaries
 
-- `POST /projects` create project metadata
-- `GET /projects` list project summary with working document counts
-- `GET /projects/{project_number}` project detail with working documents
-- `POST /projects/{project_number}/pull` pull one or many docs into project working set
-- `POST /projects/{project_number}/working/{working_revision_id}/ready` mark working item READY
-- `POST /projects/{project_number}/working/{working_revision_id}/abandon` abandon working item
-- `POST /projects/{project_number}/merge` merge READY working items into Plant
-- `GET /documents` list Plant documents with `active_project_count`
+- **Plant Upload** (`Plant Upload` navigation): updates Plant current revision directly.
+- **Project working upload** (`Projects` → project detail): uploads file into project working revision only; Plant is unchanged until merge.
 
-### UI flow
+### Core API endpoints
 
-1. Open **Documents**.
-2. Select one or more docs, enter a project number (for example `PRJ-100`), and click **Pull selected for project**.
-3. Open **Projects** to see Projects Summary.
-4. Open the project detail, mark individual items **READY**.
-5. Click **Merge to Plant** to promote READY items.
+- `POST /projects` create project
+- `GET /projects?status=ACTIVE` list active projects for pull dropdown
+- `POST /projects/{project_id}/pull` pull one or more documents to project
+- `POST /projects/{project_id}/working/{working_revision_id}/upload` upload working revision file
+- `POST /projects/{project_number}/working/{working_revision_id}/ready` mark ready
+- `POST /projects/{project_number}/merge` merge READY docs to Plant
+- `POST /documents/{document_id}/plant/upload` upload directly to Plant revision
 
-### Acceptance test checklist
+### UI behavior guardrails
 
-1. Create project `PRJ-100` and pull `DOC-001` + `DOC-002`.
-2. Projects Summary shows `PRJ-100` with count `2`.
-3. Project detail shows both docs in `WORKING`.
-4. Mark `DOC-001` as `READY`.
-5. Merge project merges only `DOC-001`; `DOC-002` remains `WORKING`.
-6. Documents list shows `DOC-001` current Plant revision updated.
-7. Restart backend; data remains available.
-8. Audit events exist for pull, ready, and merge actions.
+- Pull is disabled when no ACTIVE projects exist, with CTA **Create a project first**.
+- Pull target is selected from ACTIVE project dropdown (no free-text project number).
+- Project detail includes status badges: `WORKING`, `READY`, `MERGED`, `ABANDONED`.
+- Push to Plant includes confirmation and merges only READY items.
+
+### Acceptance walk-through
+
+1. Create project `PRJ-200`.
+2. Open **Documents (Plant)**, select `DOC-001`, and pull via ACTIVE project dropdown.
+3. Open project detail and verify `DOC-001` appears under **Working**.
+4. Upload working revision in project row.
+5. Mark item **READY** and click **Push to Plant**.
+6. Verify Plant document revision increments.
+7. Restart backend and verify records persist (SQLite path under `backend/.data/edms.db`).
