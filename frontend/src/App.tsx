@@ -1,17 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  fetchMe,
-  getProjectDetail,
-  listProjects,
-  pullDocumentsForProject,
-  resetDemoData,
-  seedDemoData,
-} from "./api";
+import { fetchDashboard, fetchMe, resetDemoData, seedDemoData } from "./api";
+import DashboardPanel from "./components/DashboardPanel";
 import DocumentCreatePanel from "./components/DocumentCreatePanel";
 import DocumentSearchPanel from "./components/DocumentSearchPanel";
 import LoginPanel from "./components/LoginPanel";
-import ProjectDetailPanel from "./components/ProjectDetailPanel";
-import ProjectsSummaryPanel from "./components/ProjectsSummaryPanel";
 import Button from "./components/ui/Button";
 import Card from "./components/ui/Card";
 import Skeleton from "./components/ui/Skeleton";
@@ -32,20 +24,14 @@ export default function App(): JSX.Element {
     localStorage.getItem(STORAGE_KEY),
   );
   const [me, setMe] = useState<MeResponse | null>(null);
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [activeProjectNumber, setActiveProjectNumber] = useState<string | null>(
-    null,
-  );
-  const [activeProject, setActiveProject] = useState<ProjectDetail | null>(
-    null,
-  );
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchRefreshKey, setSearchRefreshKey] = useState(0);
   const [createdDocuments, setCreatedDocuments] = useState<SearchDocument[]>(
     [],
   );
-  const [activeSection, setActiveSection] = useState<NavSection>("projects");
+  const [activeSection, setActiveSection] = useState<NavSection>("dashboard");
   const [toast, setToast] = useState<string | null>(null);
   const [isRunningDemoAction, setIsRunningDemoAction] = useState(false);
 
@@ -67,6 +53,15 @@ export default function App(): JSX.Element {
     }
 
     const timeout = window.setTimeout(() => setToast(null), 2600);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setToast(null), 2400);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
@@ -142,10 +137,11 @@ export default function App(): JSX.Element {
           : await resetDemoData(token);
       setCreatedDocuments([]);
       setSearchRefreshKey((value) => value + 1);
-      await refreshProjects(token);
       setToast(
-        `${action === "seed" ? "Seeded" : "Reset"} demo data: ${result.documents_created} docs`,
+        `${action === "seed" ? "Seeded" : "Reset"} demo data: ${result.documents_created} docs, ${result.approvals_created} approval(s).`,
       );
+      const dashboard = await fetchDashboard(token);
+      setSummary(dashboard);
     } catch (demoError) {
       setError(
         demoError instanceof Error ? demoError.message : "Demo action failed",
@@ -164,29 +160,14 @@ export default function App(): JSX.Element {
     setToast("Document record created successfully.");
   }
 
-  async function handlePullForProject(
-    documentIds: number[],
-    projectNumber: string,
-  ): Promise<void> {
-    if (!token) {
-      return;
-    }
-
-    await pullDocumentsForProject(token, projectNumber, documentIds);
-    await refreshProjects(token);
-    await openProject(projectNumber);
-    setSearchRefreshKey((value) => value + 1);
-    setToast(`Pulled ${documentIds.length} docs to ${projectNumber}.`);
-  }
-
   return (
     <main className="app-shell">
       <aside className="sidebar">
         <h1>GitPlant EDMS</h1>
-        <p className="muted">Plant & project working sets.</p>
+        <p className="muted">Professional document control workspace.</p>
         <nav className="stack-sm" aria-label="Primary">
           {[
-            ["projects", "Projects"],
+            ["dashboard", "Dashboard"],
             ["documents", "Documents"],
             ["upload", "Upload PDFs"],
             ["audit", "Audit"],
@@ -257,30 +238,9 @@ export default function App(): JSX.Element {
               </p>
             </Card>
 
-            {(activeSection === "projects" ||
-              activeSection === "documents") && (
-              <ProjectsSummaryPanel
-                projects={projects}
-                onOpenProject={(projectNumber) => {
-                  void openProject(projectNumber);
-                }}
-              />
-            )}
-
-            {activeSection === "projects" && activeProject ? (
-              <ProjectDetailPanel
-                token={token!}
-                project={activeProject}
-                onRefresh={async () => {
-                  await openProject(activeProject.project_number);
-                }}
-                onMerged={async () => {
-                  await openProject(activeProject.project_number);
-                  await refreshProjects(token!);
-                  setSearchRefreshKey((value) => value + 1);
-                  setToast("Project merged to Plant.");
-                }}
-              />
+            {(activeSection === "dashboard" || activeSection === "documents") &&
+            summary ? (
+              <DashboardPanel summary={summary} />
             ) : null}
 
             {(activeSection === "upload" || activeSection === "documents") && (
@@ -295,7 +255,6 @@ export default function App(): JSX.Element {
                 token={token!}
                 refreshKey={searchRefreshKey}
                 createdDocuments={createdDocuments}
-                onPullForProject={handlePullForProject}
               />
             )}
           </>
