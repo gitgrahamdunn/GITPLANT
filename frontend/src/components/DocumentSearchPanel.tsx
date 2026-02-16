@@ -1,5 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { searchDocuments } from '../api';
+import {
+  downloadDocumentPdf,
+  pullDocumentForRevision,
+  searchDocuments,
+} from '../api';
 import type { SearchDocument } from '../types';
 
 interface DocumentSearchPanelProps {
@@ -12,6 +16,7 @@ export default function DocumentSearchPanel({ token, refreshKey = 0 }: DocumentS
   const [documents, setDocuments] = useState<SearchDocument[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function loadDocuments(searchTerm: string): Promise<void> {
@@ -38,6 +43,38 @@ export default function DocumentSearchPanel({ token, refreshKey = 0 }: DocumentS
     void loadDocuments(query);
   }
 
+  async function handlePullForRevision(documentId: number): Promise<void> {
+    setError(null);
+    setActionMessage(null);
+
+    try {
+      const pulled = await pullDocumentForRevision(token, documentId);
+      setActionMessage(pulled.message);
+
+      void handleDownload(documentId);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'Failed to pull document for revision');
+    }
+  }
+
+  async function handleDownload(documentId: number): Promise<void> {
+    setError(null);
+
+    try {
+      const fileBlob = await downloadDocumentPdf(token, documentId);
+      const objectUrl = URL.createObjectURL(fileBlob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `document-${documentId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : 'Failed to download document PDF');
+    }
+  }
+
   return (
     <section className="card">
       <h2>Document search</h2>
@@ -53,6 +90,7 @@ export default function DocumentSearchPanel({ token, refreshKey = 0 }: DocumentS
       </form>
 
       <p className="hint">{total} document(s) found.</p>
+      {actionMessage ? <p className="success">{actionMessage}</p> : null}
       {error ? <p className="error">{error}</p> : null}
 
       <div className="table-wrap">
@@ -65,6 +103,7 @@ export default function DocumentSearchPanel({ token, refreshKey = 0 }: DocumentS
               <th>Discipline</th>
               <th>Status</th>
               <th>Current revision</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -76,6 +115,28 @@ export default function DocumentSearchPanel({ token, refreshKey = 0 }: DocumentS
                 <td>{document.discipline}</td>
                 <td>{document.status}</td>
                 <td>{document.current_revision}</td>
+                <td>
+                  <div className="table-actions">
+                    <button
+                      type="button"
+                      className="subtle-button"
+                      onClick={() => {
+                        void handlePullForRevision(document.id);
+                      }}
+                    >
+                      Pull for revision
+                    </button>
+                    <button
+                      type="button"
+                      className="subtle-button"
+                      onClick={() => {
+                        void handleDownload(document.id);
+                      }}
+                    >
+                      Download PDF
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

@@ -47,6 +47,14 @@ class DocumentBatchCreateResponse(ORMResponseModel):
     total_created: int
     items: list[DocumentResponse]
 
+
+
+class PullForRevisionResponse(ORMResponseModel):
+    document_id: int
+    document_number: str
+    message: str
+    download_url: str
+
 class BranchCreateRequest(BaseModel):
     name: str
 
