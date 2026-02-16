@@ -51,7 +51,7 @@ export default function App(): JSX.Element {
           <section className="card">
             <h2>Session</h2>
             <p>
-              Signed in as <strong>{me.username}</strong> ({me.role})
+             Signed in as <strong>{me.email}</strong> ({me.role})
             </p>
             <button type="button" onClick={() => setToken(null)}>
               Sign out

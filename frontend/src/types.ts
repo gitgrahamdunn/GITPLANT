@@ -1,21 +1,22 @@
-export type Role = 'viewer' | 'engineer' | 'approver' | 'admin';
+export type Role = 'document_controller' | 'engineer' | 'approver';
 
 export interface LoginResponse {
   access_token: string;
   token_type: string;
+  role: string;
 }
 
 export interface MeResponse {
-  user_id: number;
-  username: string;
-  role: Role;
+  email: string;
+  role: string;
 }
 
 export interface DashboardSummary {
   total_documents: number;
-  by_status: Record<string, number>;
-  open_transmittals: number;
-  approvals_pending: number;
+  documents_ifa: number;
+  documents_ifc: number;
+  open_approvals: number;
+  total_transmittals: number;
 }
 
 export interface SearchDocument {

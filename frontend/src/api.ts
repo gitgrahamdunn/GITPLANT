@@ -6,7 +6,7 @@ import type {
   SearchDocument
 } from './types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -25,12 +25,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function login(username: string, role: Role): Promise<LoginResponse> {
+export async function login(email: string, password: string): Promise<LoginResponse> {
   return request<LoginResponse>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username, role })
+    body: JSON.stringify({ email, password })
   });
 }
+
 
 export async function fetchMe(token: string): Promise<MeResponse> {
   return request<MeResponse>('/auth/me', {

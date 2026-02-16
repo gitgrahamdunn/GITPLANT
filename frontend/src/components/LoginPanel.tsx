@@ -1,16 +1,13 @@
 import { FormEvent, useState } from 'react';
 import { login } from '../api';
-import type { Role } from '../types';
-
-const roles: Role[] = ['viewer', 'engineer', 'approver', 'admin'];
 
 interface LoginPanelProps {
   onToken: (token: string) => void;
 }
 
 export default function LoginPanel({ onToken }: LoginPanelProps): JSX.Element {
-  const [username, setUsername] = useState('alice');
-  const [role, setRole] = useState<Role>('engineer');
+  const [email, setEmail] = useState('engineer@edms.local');
+  const [password, setPassword] = useState('engineer123');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -20,7 +17,7 @@ export default function LoginPanel({ onToken }: LoginPanelProps): JSX.Element {
     setIsSubmitting(true);
 
     try {
-      const result = await login(username, role);
+      const result = await login(email, password);
       onToken(result.access_token);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Login failed');
@@ -32,33 +29,34 @@ export default function LoginPanel({ onToken }: LoginPanelProps): JSX.Element {
   return (
     <section className="card">
       <h2>Sign in</h2>
-      <p className="hint">Use demo auth to load dashboard and search data from the API.</p>
+      <p className="hint">Demo accounts:</p>
+      <ul className="hint">
+        <li>controller@edms.local / controller123</li>
+        <li>engineer@edms.local / engineer123</li>
+        <li>approver@edms.local / approver123</li>
+      </ul>
+
       <form onSubmit={handleSubmit} className="stack">
         <label>
-          Username
-          <input
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            placeholder="alice"
-            required
-          />
+          Email
+          <input value={email} onChange={(e) => setEmail(e.target.value)} required />
         </label>
 
         <label>
-          Role
-          <select value={role} onChange={(event) => setRole(event.target.value as Role)}>
-            {roles.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
+          Password
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
         </label>
 
         <button type="submit" disabled={isSubmitting}>
           {isSubmitting ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
+
       {error ? <p className="error">{error}</p> : null}
     </section>
   );
