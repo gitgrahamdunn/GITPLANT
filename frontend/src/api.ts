@@ -1,5 +1,6 @@
 import type {
   DashboardSummary,
+  DocumentBatchCreateResponse,
   DocumentCreateRequest,
   DocumentSearchResponse,
   LoginResponse,
@@ -32,6 +33,31 @@ function formatErrorPayload(payload: unknown, fallback: string): string {
   }
 
   return fallback;
+}
+
+
+
+async function requestForm<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, options);
+
+  if (!response.ok) {
+    let message = `Request failed with ${response.status}`;
+    const contentType = response.headers.get('content-type') ?? '';
+
+    if (contentType.includes('application/json')) {
+      const payload = await response.json();
+      message = formatErrorPayload(payload, message);
+    } else {
+      const text = await response.text();
+      if (text) {
+        message = text;
+      }
+    }
+
+    throw new Error(message);
+  }
+
+  return response.json() as Promise<T>;
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -115,5 +141,19 @@ export async function searchDocuments(
     headers: {
       Authorization: `Bearer ${token}`
     }
+  });
+}
+
+
+export async function uploadPdfDocuments(
+  token: string,
+  payload: FormData
+): Promise<DocumentBatchCreateResponse> {
+  return requestForm<DocumentBatchCreateResponse>('/documents/upload-pdf', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: payload
   });
 }

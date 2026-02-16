@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from io import StringIO
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from sqlmodel import Session, col, delete, or_, select
 
 from app.db import get_session
@@ -20,6 +20,7 @@ from app.schemas import (
     DashboardExtendedResponse,
     DashboardSummaryResponse,
     DisciplineBreakdownItem,
+    DocumentBatchCreateResponse,
     DocumentCreateRequest,
     DocumentResponse,
     DocumentSearchResponse,
@@ -95,6 +96,70 @@ def create_document(
     )
     session.commit()
     return document
+
+
+
+
+def _to_document_number(file_name: str, index: int) -> str:
+    stem = file_name.rsplit('.', 1)[0].strip()
+    normalized = ''.join(ch if ch.isalnum() else '-' for ch in stem)
+    normalized = '-'.join(filter(None, normalized.split('-'))).upper()
+    if not normalized:
+        return f"PDF-{index + 1}"
+    return normalized
+
+
+@router.post(
+    "/upload-pdf",
+    response_model=DocumentBatchCreateResponse,
+    summary="Create document records from uploaded PDF files",
+)
+def create_documents_from_pdf_upload(
+    project_code: str = Form(...),
+    discipline: str = Form(...),
+    files: list[UploadFile] = File(...),
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(require_roles("user")),
+):
+    created_documents: list[Document] = []
+
+    for index, file in enumerate(files):
+        file_name = (file.filename or "").strip()
+        if not file_name.lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+        document_number = _to_document_number(file_name, index)
+        existing = session.exec(
+            select(Document).where(Document.document_number == document_number)
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Document number already exists: {document_number}",
+            )
+
+        title = file_name.rsplit('.', 1)[0].strip() or "Untitled PDF document"
+        document = Document(
+            project_code=project_code,
+            document_number=document_number,
+            title=title,
+            discipline=discipline,
+        )
+        session.add(document)
+        session.commit()
+        session.refresh(document)
+
+        record_audit_event(
+            session,
+            document.id,
+            "document_created",
+            current_user.email,
+            f"Document {document.document_number} created from uploaded PDF {file_name}",
+        )
+        session.commit()
+        created_documents.append(document)
+
+    return DocumentBatchCreateResponse(total_created=len(created_documents), items=created_documents)
 
 
 @router.get("/search", response_model=DocumentSearchResponse, summary="Search documents")

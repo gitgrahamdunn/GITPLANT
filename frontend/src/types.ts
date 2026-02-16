@@ -40,3 +40,9 @@ export interface DocumentCreateRequest {
   title: string;
   discipline: string;
 }
+
+
+export interface DocumentBatchCreateResponse {
+  total_created: number;
+  items: SearchDocument[];
+}

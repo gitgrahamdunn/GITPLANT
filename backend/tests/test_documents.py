@@ -299,3 +299,23 @@ def test_document_search_transmittal_audit_and_dashboard_flow():
     assert summary.json()["total_documents"] == 1
     assert summary.json()["total_transmittals"] == 1
 
+
+
+def test_pdf_upload_creates_documents_from_multipart_files():
+    reset_db()
+    headers = auth_headers("user@edms.local", "user123")
+
+    files = [
+        ("files", ("moc register.pdf", b"%PDF-1.7\nmock-1", "application/pdf")),
+        ("files", ("piping index.PDF", b"%PDF-1.7\nmock-2", "application/pdf")),
+    ]
+    data = {"project_code": "PRJ-9", "discipline": "General"}
+
+    response = client.post("/documents/upload-pdf", headers=headers, data=data, files=files)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_created"] == 2
+    assert len(payload["items"]) == 2
+    assert payload["items"][0]["document_number"] == "MOC-REGISTER"
+    assert payload["items"][1]["document_number"] == "PIPING-INDEX"
