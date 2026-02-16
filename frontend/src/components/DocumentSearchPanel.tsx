@@ -14,6 +14,10 @@ interface DocumentSearchPanelProps {
   token: string;
   refreshKey?: number;
   createdDocuments?: SearchDocument[];
+  onPullForProject: (
+    documentIds: number[],
+    projectNumber: string,
+  ) => Promise<void>;
 }
 
 type SortField = "document_number" | "title" | "status";
@@ -34,6 +38,7 @@ export default function DocumentSearchPanel({
   token,
   refreshKey = 0,
   createdDocuments = [],
+  onPullForProject,
 }: DocumentSearchPanelProps): JSX.Element {
   const [query, setQuery] = useState("");
   const [documents, setDocuments] = useState<SearchDocument[]>([]);
@@ -41,6 +46,8 @@ export default function DocumentSearchPanel({
   const [visibleCount, setVisibleCount] = useState(10);
   const [sortField, setSortField] = useState<SortField>("document_number");
   const [sortAscending, setSortAscending] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [projectNumber, setProjectNumber] = useState("");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -126,6 +133,33 @@ export default function DocumentSearchPanel({
     }
   }
 
+  function toggleDocumentSelection(documentId: number): void {
+    setSelectedIds((existing) =>
+      existing.includes(documentId)
+        ? existing.filter((id) => id !== documentId)
+        : [...existing, documentId],
+    );
+  }
+
+  async function pullSelectedForProject(): Promise<void> {
+    if (!selectedIds.length) {
+      setError("Select one or more documents first.");
+      return;
+    }
+    if (!projectNumber.trim()) {
+      setError("Project Number is required.");
+      return;
+    }
+
+    setError(null);
+    await onPullForProject(selectedIds, projectNumber.trim());
+    setSelectedIds([]);
+    setProjectNumber("");
+    setActionMessage(
+      `Pulled ${selectedIds.length} document(s) to ${projectNumber}.`,
+    );
+  }
+
   return (
     <Card title="Documents" subtitle="Search, sort, and review uploaded files.">
       <form className="inline-form" onSubmit={handleSubmit}>
@@ -139,6 +173,21 @@ export default function DocumentSearchPanel({
           {isLoading ? "Searching…" : "Search"}
         </Button>
       </form>
+
+      <div className="inline-form">
+        <label className="field-label">
+          <span>Project Number (for pull)</span>
+          <input
+            className="input"
+            placeholder="PRJ-2417"
+            value={projectNumber}
+            onChange={(event) => setProjectNumber(event.target.value)}
+          />
+        </label>
+        <Button type="button" onClick={() => void pullSelectedForProject()}>
+          Pull selected for project
+        </Button>
+      </div>
 
       <div className="inline-form">
         <label className="field-label">
@@ -180,26 +229,45 @@ export default function DocumentSearchPanel({
           <table>
             <thead>
               <tr>
+                <th>Select</th>
                 <th>ID</th>
                 <th>Document No.</th>
                 <th>Title</th>
                 <th>Discipline</th>
                 <th>Status</th>
-                <th>Current revision</th>
+                <th>Plant revision</th>
+                <th>Projects</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {visibleDocuments.map((document) => (
                 <tr key={document.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(document.id)}
+                      onChange={() => toggleDocumentSelection(document.id)}
+                    />
+                  </td>
                   <td>{document.id}</td>
                   <td>{document.document_number}</td>
                   <td>{document.title}</td>
                   <td>{document.discipline}</td>
                   <td>{document.status}</td>
                   <td>{document.current_revision}</td>
+                  <td>{document.active_project_count ?? 0}</td>
                   <td>
                     <div className="table-actions">
+                      <button
+                        type="button"
+                        className="subtle-button"
+                        onClick={() => {
+                          setSelectedIds([document.id]);
+                        }}
+                      >
+                        Select
+                      </button>
                       <button
                         type="button"
                         className="subtle-button"

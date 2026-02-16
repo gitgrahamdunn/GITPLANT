@@ -102,3 +102,43 @@ When `ENABLE_DEMO_TOOLS=true`, the frontend enables:
 - **Reset demo**: clears document tables and stored PDF files, then reseeds demo data.
 
 > ⚠️ These controls are intended for local/dev workflows only and should stay disabled in production.
+
+
+## Project workflow (pull/merge)
+
+GitPlant now supports a **Project Working Set** flow that maps directly to Git concepts:
+
+- **Plant** = main branch (authoritative current revisions)
+- **Project** = branch/workspace
+- **Pull for project** = checkout into a project workspace
+- **Merge to Plant** = promote READY working revisions to Plant
+
+### API endpoints
+
+- `POST /projects` create project metadata
+- `GET /projects` list project summary with working document counts
+- `GET /projects/{project_number}` project detail with working documents
+- `POST /projects/{project_number}/pull` pull one or many docs into project working set
+- `POST /projects/{project_number}/working/{working_revision_id}/ready` mark working item READY
+- `POST /projects/{project_number}/working/{working_revision_id}/abandon` abandon working item
+- `POST /projects/{project_number}/merge` merge READY working items into Plant
+- `GET /documents` list Plant documents with `active_project_count`
+
+### UI flow
+
+1. Open **Documents**.
+2. Select one or more docs, enter a project number (for example `PRJ-100`), and click **Pull selected for project**.
+3. Open **Projects** to see Projects Summary.
+4. Open the project detail, mark individual items **READY**.
+5. Click **Merge to Plant** to promote READY items.
+
+### Acceptance test checklist
+
+1. Create project `PRJ-100` and pull `DOC-001` + `DOC-002`.
+2. Projects Summary shows `PRJ-100` with count `2`.
+3. Project detail shows both docs in `WORKING`.
+4. Mark `DOC-001` as `READY`.
+5. Merge project merges only `DOC-001`; `DOC-002` remains `WORKING`.
+6. Documents list shows `DOC-001` current Plant revision updated.
+7. Restart backend; data remains available.
+8. Audit events exist for pull, ready, and merge actions.

@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db import init_db
-from app.routers import auth, documents, health
+from app.routers import auth, documents, health, projects
 
 app = FastAPI(title=settings.app_name)
 
@@ -26,6 +26,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(documents.router)
+app.include_router(projects.router)
 
 
 @app.middleware("http")

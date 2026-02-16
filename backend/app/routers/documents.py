@@ -17,6 +17,8 @@ from app.models import (
     Branch,
     Document,
     DocumentRevision,
+    Project,
+    ProjectWorkingRevision,
     Transmittal,
 )
 from app.schemas import (
@@ -188,6 +190,44 @@ def _seed_demo_data(session: Session) -> DemoSeedResponse:
     )
 
 
+def _active_project_counts_by_document(
+    session: Session, document_ids: list[int]
+) -> dict[int, int]:
+    if not document_ids:
+        return {}
+
+    working_rows = session.exec(
+        select(ProjectWorkingRevision, Project)
+        .join(Project, Project.id == ProjectWorkingRevision.project_id)
+        .where(
+            ProjectWorkingRevision.document_id.in_(document_ids),
+            ProjectWorkingRevision.status.in_(["WORKING", "READY"]),
+            Project.status == "ACTIVE",
+        )
+    ).all()
+
+    counts: dict[int, set[str]] = {}
+    for working, project in working_rows:
+        counts.setdefault(working.document_id, set()).add(project.id)
+
+    return {doc_id: len(project_ids) for doc_id, project_ids in counts.items()}
+
+
+def _to_document_response(
+    document: Document, active_project_count: int = 0
+) -> DocumentResponse:
+    return DocumentResponse(
+        id=document.id,
+        project_code=document.project_code,
+        document_number=document.document_number,
+        title=document.title,
+        discipline=document.discipline,
+        status=document.status,
+        current_revision=document.current_revision,
+        active_project_count=active_project_count,
+    )
+
+
 def _deserialize_datetimes(row: dict, fields: list[str]) -> dict:
     parsed = dict(row)
     for field in fields:
@@ -225,7 +265,7 @@ def create_document(
         f"Document {document.document_number} created",
     )
     session.commit()
-    return document
+    return _to_document_response(document)
 
 
 def _document_pdf_path(document_id: int) -> Path:
@@ -373,6 +413,17 @@ def download_document_file(
     )
 
 
+@router.get("", response_model=DocumentSearchResponse, summary="List documents")
+def list_documents(
+    session: Session = Depends(get_session),
+    _: CurrentUser = Depends(require_roles("user")),
+):
+    items = session.exec(select(Document).order_by(col(Document.id))).all()
+    counts = _active_project_counts_by_document(session, [item.id for item in items])
+    result = [_to_document_response(item, counts.get(item.id, 0)) for item in items]
+    return DocumentSearchResponse(total=len(result), items=result)
+
+
 @router.get(
     "/search", response_model=DocumentSearchResponse, summary="Search documents"
 )
@@ -400,7 +451,9 @@ def search_documents(
         query = query.where(Document.status == status)
 
     items = session.exec(query.order_by(col(Document.id))).all()
-    return DocumentSearchResponse(total=len(items), items=items)
+    counts = _active_project_counts_by_document(session, [item.id for item in items])
+    result = [_to_document_response(item, counts.get(item.id, 0)) for item in items]
+    return DocumentSearchResponse(total=len(result), items=result)
 
 
 @router.get(

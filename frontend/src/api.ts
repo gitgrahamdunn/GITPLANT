@@ -1,13 +1,17 @@
 import type {
-  DashboardSummary,
   DemoSeedResponse,
   DocumentBatchCreateResponse,
   DocumentCreateRequest,
   DocumentSearchResponse,
   LoginResponse,
   MeResponse,
+  ProjectDetail,
+  ProjectMergeResponse,
+  ProjectPullResponse,
+  ProjectSummary,
   PullForRevisionResponse,
   SearchDocument,
+  WorkingRevisionStatusResponse,
 } from "./types";
 
 const API_BASE_URL =
@@ -122,14 +126,6 @@ export async function fetchMe(token: string): Promise<MeResponse> {
   });
 }
 
-export async function fetchDashboard(token: string): Promise<DashboardSummary> {
-  return request<DashboardSummary>("/documents/reports/dashboard-summary", {
-    headers: {
-      ...getAuthHeaders(token),
-    },
-  });
-}
-
 export async function createDocument(
   token: string,
   payload: DocumentCreateRequest,
@@ -142,6 +138,17 @@ export async function createDocument(
     body: JSON.stringify(payload),
   });
 }
+
+export async function listDocuments(
+  token: string,
+): Promise<DocumentSearchResponse> {
+  return request<DocumentSearchResponse>("/documents", {
+    headers: {
+      ...getAuthHeaders(token),
+    },
+  });
+}
+
 export async function searchDocuments(
   token: string,
   query: string,
@@ -186,10 +193,6 @@ export async function pullDocumentForRevision(
   );
 }
 
-export function getDocumentDownloadUrl(documentId: number): string {
-  return buildApiUrl(`/documents/${documentId}/download`);
-}
-
 export async function downloadDocumentPdf(
   token: string,
   documentId: number,
@@ -219,6 +222,71 @@ export async function downloadDocumentPdf(
   }
 
   return response.blob();
+}
+
+export async function listProjects(token: string): Promise<ProjectSummary[]> {
+  return request<ProjectSummary[]>("/projects", {
+    headers: { ...getAuthHeaders(token) },
+  });
+}
+
+export async function getProjectDetail(
+  token: string,
+  projectNumber: string,
+): Promise<ProjectDetail> {
+  return request<ProjectDetail>(`/projects/${projectNumber}`, {
+    headers: { ...getAuthHeaders(token) },
+  });
+}
+
+export async function pullDocumentsForProject(
+  token: string,
+  projectNumber: string,
+  documentIds: number[],
+): Promise<ProjectPullResponse> {
+  return request<ProjectPullResponse>(`/projects/${projectNumber}/pull`, {
+    method: "POST",
+    headers: { ...getAuthHeaders(token) },
+    body: JSON.stringify({ document_ids: documentIds }),
+  });
+}
+
+export async function markWorkingReady(
+  token: string,
+  projectNumber: string,
+  workingRevisionId: number,
+): Promise<WorkingRevisionStatusResponse> {
+  return request<WorkingRevisionStatusResponse>(
+    `/projects/${projectNumber}/working/${workingRevisionId}/ready`,
+    {
+      method: "POST",
+      headers: { ...getAuthHeaders(token) },
+    },
+  );
+}
+
+export async function abandonWorkingRevision(
+  token: string,
+  projectNumber: string,
+  workingRevisionId: number,
+): Promise<WorkingRevisionStatusResponse> {
+  return request<WorkingRevisionStatusResponse>(
+    `/projects/${projectNumber}/working/${workingRevisionId}/abandon`,
+    {
+      method: "POST",
+      headers: { ...getAuthHeaders(token) },
+    },
+  );
+}
+
+export async function mergeProjectToPlant(
+  token: string,
+  projectNumber: string,
+): Promise<ProjectMergeResponse> {
+  return request<ProjectMergeResponse>(`/projects/${projectNumber}/merge`, {
+    method: "POST",
+    headers: { ...getAuthHeaders(token) },
+  });
 }
 
 export async function seedDemoData(token: string): Promise<DemoSeedResponse> {

@@ -1,11 +1,13 @@
-import type { DashboardSummary } from '../types';
-import Card from './ui/Card';
+import type { DashboardSummary } from "../types";
+import Card from "./ui/Card";
 
 interface DashboardPanelProps {
   summary: DashboardSummary;
 }
 
-export default function DashboardPanel({ summary }: DashboardPanelProps): JSX.Element {
+export default function DashboardPanel({
+  summary,
+}: DashboardPanelProps): JSX.Element {
   return (
     <Card title="Dashboard" subtitle="Live document control metrics.">
       <div className="stats-grid">

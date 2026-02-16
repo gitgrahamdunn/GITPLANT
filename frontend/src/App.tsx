@@ -8,11 +8,16 @@ import Button from "./components/ui/Button";
 import Card from "./components/ui/Card";
 import Skeleton from "./components/ui/Skeleton";
 import Toast from "./components/ui/Toast";
-import type { DashboardSummary, MeResponse, SearchDocument } from "./types";
+import type {
+  MeResponse,
+  ProjectDetail,
+  ProjectSummary,
+  SearchDocument,
+} from "./types";
 
 const STORAGE_KEY = "gitplant.token";
 
-type NavSection = "dashboard" | "documents" | "upload" | "audit";
+type NavSection = "projects" | "documents" | "upload" | "audit";
 
 export default function App(): JSX.Element {
   const [token, setToken] = useState<string | null>(() =>
@@ -32,6 +37,25 @@ export default function App(): JSX.Element {
 
   const isAuthed = useMemo(() => Boolean(token && me), [token, me]);
 
+  async function refreshProjects(authToken: string): Promise<void> {
+    const allProjects = await listProjects(authToken);
+    setProjects(allProjects);
+
+    if (activeProjectNumber) {
+      const detail = await getProjectDetail(authToken, activeProjectNumber);
+      setActiveProject(detail);
+    }
+  }
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setToast(null), 2600);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
   useEffect(() => {
     if (!toast) {
       return;
@@ -44,7 +68,9 @@ export default function App(): JSX.Element {
   useEffect(() => {
     if (!token) {
       setMe(null);
-      setSummary(null);
+      setProjects([]);
+      setActiveProjectNumber(null);
+      setActiveProject(null);
       localStorage.removeItem(STORAGE_KEY);
       return;
     }
@@ -58,8 +84,7 @@ export default function App(): JSX.Element {
       try {
         const profile = await fetchMe(authToken);
         setMe(profile);
-        const dashboard = await fetchDashboard(authToken);
-        setSummary(dashboard);
+        await refreshProjects(authToken);
       } catch (loadError) {
         setError(
           loadError instanceof Error
@@ -75,10 +100,23 @@ export default function App(): JSX.Element {
     void loadData();
   }, [token]);
 
+  async function openProject(projectNumber: string): Promise<void> {
+    if (!token) {
+      return;
+    }
+
+    setActiveProjectNumber(projectNumber);
+    const detail = await getProjectDetail(token, projectNumber);
+    setActiveProject(detail);
+    setActiveSection("projects");
+  }
+
   function handleLogout(): void {
     setToken(null);
     setMe(null);
-    setSummary(null);
+    setProjects([]);
+    setActiveProjectNumber(null);
+    setActiveProject(null);
     setError(null);
     setCreatedDocuments([]);
     localStorage.removeItem(STORAGE_KEY);

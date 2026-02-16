@@ -9,6 +9,8 @@ from app.models import (
     Branch,
     Document,
     DocumentRevision,
+    Project,
+    ProjectWorkingRevision,
     Transmittal,
 )
 
@@ -24,6 +26,8 @@ def auth_headers(email: str, password: str) -> dict[str, str]:
 def reset_db() -> None:
     init_db()
     with Session(engine) as session:
+        session.exec(delete(ProjectWorkingRevision))
+        session.exec(delete(Project))
         session.exec(delete(AuditEvent))
         session.exec(delete(Transmittal))
         session.exec(delete(Approval))
