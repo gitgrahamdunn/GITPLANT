@@ -39,8 +39,7 @@ class DocumentResponse(ORMResponseModel):
     discipline: str
     status: str
     current_revision: str
-
-
+    active_project_count: int = 0
 
 
 class DocumentBatchCreateResponse(ORMResponseModel):
@@ -48,12 +47,12 @@ class DocumentBatchCreateResponse(ORMResponseModel):
     items: list[DocumentResponse]
 
 
-
 class PullForRevisionResponse(ORMResponseModel):
     document_id: int
     document_number: str
     message: str
     download_url: str
+
 
 class BranchCreateRequest(BaseModel):
     name: str
@@ -202,3 +201,84 @@ class BackupSnapshotResponse(ORMResponseModel):
 
 class RestoreSnapshotRequest(BaseModel):
     snapshot: dict[str, list[dict[str, Any]]]
+
+
+class DemoSeedResponse(ORMResponseModel):
+    status: str
+    documents_created: int
+    approvals_created: int
+    audits_created: int
+    warning: str
+
+
+class ProjectCreateRequest(BaseModel):
+    project_number: str
+    name: str | None = None
+    description: str | None = None
+
+
+class ProjectSummaryResponse(ORMResponseModel):
+    id: str
+    project_number: str
+    name: str | None
+    description: str | None
+    status: str
+    created_by: str
+    created_at: datetime
+    working_doc_count: int
+
+
+class ProjectWorkingRevisionResponse(ORMResponseModel):
+    id: int
+    project_id: str
+    document_id: int
+    document_number: str
+    title: str
+    current_plant_revision: str
+    working_revision_label: str
+    status: str
+    pulled_by: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProjectDetailResponse(ORMResponseModel):
+    id: str
+    project_number: str
+    name: str | None
+    description: str | None
+    status: str
+    created_by: str
+    created_at: datetime
+    working_docs: list[ProjectWorkingRevisionResponse]
+
+
+class ProjectPullRequest(BaseModel):
+    document_ids: list[int] | None = None
+    document_id: int | None = None
+
+
+class ProjectPullResponse(ORMResponseModel):
+    project_number: str
+    created: list[ProjectWorkingRevisionResponse]
+    skipped_document_ids: list[int]
+
+
+class ProjectMergeItemResponse(ORMResponseModel):
+    working_revision_id: int
+    document_id: int
+    document_number: str
+    previous_revision: str
+    new_revision: str
+
+
+class ProjectMergeResponse(ORMResponseModel):
+    project_number: str
+    merged_count: int
+    merged_items: list[ProjectMergeItemResponse]
+
+
+class WorkingRevisionStatusResponse(ORMResponseModel):
+    id: int
+    status: str
+    updated_at: datetime

@@ -1,17 +1,22 @@
 import type {
-  DashboardSummary,
+  DemoSeedResponse,
   DocumentBatchCreateResponse,
   DocumentCreateRequest,
   DocumentSearchResponse,
   LoginResponse,
   MeResponse,
+  ProjectDetail,
+  ProjectMergeResponse,
+  ProjectPullResponse,
+  ProjectSummary,
   PullForRevisionResponse,
-  SearchDocument
-} from './types';
+  SearchDocument,
+  WorkingRevisionStatusResponse,
+} from "./types";
 
 const API_BASE_URL =
   (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
-    ?.VITE_API_BASE_URL ?? 'http://localhost:8000';
+    ?.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 function getAuthHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` };
@@ -22,38 +27,43 @@ function buildApiUrl(path: string): string {
 }
 
 function formatErrorPayload(payload: unknown, fallback: string): string {
-  if (!payload || typeof payload !== 'object') {
+  if (!payload || typeof payload !== "object") {
     return fallback;
   }
 
   const detail = (payload as { detail?: unknown }).detail;
-  if (typeof detail === 'string') {
+  if (typeof detail === "string") {
     return detail;
   }
 
   if (Array.isArray(detail)) {
     const messages = detail
-      .map((item) => (typeof item === 'object' && item && 'msg' in item ? String(item.msg) : null))
+      .map((item) =>
+        typeof item === "object" && item && "msg" in item
+          ? String(item.msg)
+          : null,
+      )
       .filter(Boolean);
 
     if (messages.length) {
-      return messages.join(', ');
+      return messages.join(", ");
     }
   }
 
   return fallback;
 }
 
-
-
-async function requestForm<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function requestForm<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
   const response = await fetch(buildApiUrl(path), options);
 
   if (!response.ok) {
     let message = `Request failed with ${response.status}`;
-    const contentType = response.headers.get('content-type') ?? '';
+    const contentType = response.headers.get("content-type") ?? "";
 
-    if (contentType.includes('application/json')) {
+    if (contentType.includes("application/json")) {
       const payload = await response.json();
       message = formatErrorPayload(payload, message);
     } else {
@@ -72,17 +82,17 @@ async function requestForm<T>(path: string, options: RequestInit = {}): Promise<
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(buildApiUrl(path), {
     headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers ?? {})
+      "Content-Type": "application/json",
+      ...(options.headers ?? {}),
     },
-    ...options
+    ...options,
   });
 
   if (!response.ok) {
     let message = `Request failed with ${response.status}`;
-    const contentType = response.headers.get('content-type') ?? '';
+    const contentType = response.headers.get("content-type") ?? "";
 
-    if (contentType.includes('application/json')) {
+    if (contentType.includes("application/json")) {
       const payload = await response.json();
       message = formatErrorPayload(payload, message);
     } else {
@@ -98,101 +108,107 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
-  return request<LoginResponse>('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password })
+export async function login(
+  email: string,
+  password: string,
+): Promise<LoginResponse> {
+  return request<LoginResponse>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
   });
 }
 
 export async function fetchMe(token: string): Promise<MeResponse> {
-  return request<MeResponse>('/auth/me', {
+  return request<MeResponse>("/auth/me", {
     headers: {
-      ...getAuthHeaders(token)
-    }
+      ...getAuthHeaders(token),
+    },
   });
 }
-
-export async function fetchDashboard(token: string): Promise<DashboardSummary> {
-  return request<DashboardSummary>('/documents/reports/dashboard-summary', {
-    headers: {
-      ...getAuthHeaders(token)
-    }
-  });
-}
-
-
 
 export async function createDocument(
   token: string,
-  payload: DocumentCreateRequest
+  payload: DocumentCreateRequest,
 ): Promise<SearchDocument> {
-  return request<SearchDocument>('/documents', {
-    method: 'POST',
+  return request<SearchDocument>("/documents", {
+    method: "POST",
     headers: {
-      ...getAuthHeaders(token)
+      ...getAuthHeaders(token),
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
 }
+
+export async function listDocuments(
+  token: string,
+): Promise<DocumentSearchResponse> {
+  return request<DocumentSearchResponse>("/documents", {
+    headers: {
+      ...getAuthHeaders(token),
+    },
+  });
+}
+
 export async function searchDocuments(
   token: string,
-  query: string
+  query: string,
 ): Promise<DocumentSearchResponse> {
   const params = new URLSearchParams();
   if (query.trim()) {
-    params.set('q', query.trim());
+    params.set("q", query.trim());
   }
 
-  const suffix = params.toString() ? `?${params.toString()}` : '';
+  const suffix = params.toString() ? `?${params.toString()}` : "";
 
   return request<DocumentSearchResponse>(`/documents/search${suffix}`, {
     headers: {
-      ...getAuthHeaders(token)
-    }
+      ...getAuthHeaders(token),
+    },
   });
 }
-
 
 export async function uploadPdfDocuments(
   token: string,
-  payload: FormData
+  payload: FormData,
 ): Promise<DocumentBatchCreateResponse> {
-  return requestForm<DocumentBatchCreateResponse>('/documents/upload-pdf', {
-    method: 'POST',
+  return requestForm<DocumentBatchCreateResponse>("/documents/upload-pdf", {
+    method: "POST",
     headers: {
-      ...getAuthHeaders(token)
+      ...getAuthHeaders(token),
     },
-    body: payload
+    body: payload,
   });
 }
-
 
 export async function pullDocumentForRevision(
   token: string,
-  documentId: number
+  documentId: number,
 ): Promise<PullForRevisionResponse> {
-  return request<PullForRevisionResponse>(`/documents/${documentId}/pull-for-revision`, {
-    method: 'POST',
-    headers: getAuthHeaders(token)
-  });
+  return request<PullForRevisionResponse>(
+    `/documents/${documentId}/pull-for-revision`,
+    {
+      method: "POST",
+      headers: getAuthHeaders(token),
+    },
+  );
 }
 
-export function getDocumentDownloadUrl(documentId: number): string {
-  return buildApiUrl(`/documents/${documentId}/download`);
-}
-
-
-export async function downloadDocumentPdf(token: string, documentId: number): Promise<Blob> {
-  const response = await fetch(buildApiUrl(`/documents/${documentId}/download`), {
-    headers: getAuthHeaders(token)
-  });
+export async function downloadDocumentPdf(
+  token: string,
+  documentId: number,
+): Promise<Blob> {
+  const response = await fetch(
+    buildApiUrl(`/documents/${documentId}/download`),
+    {
+      headers: getAuthHeaders(token),
+    },
+  );
 
   if (!response.ok) {
     let message = `Request failed with ${response.status}`;
-    const contentType = response.headers.get('content-type') ?? '';
+    const contentType = response.headers.get("content-type") ?? "";
 
-    if (contentType.includes('application/json')) {
+    if (contentType.includes("application/json")) {
       const payload = await response.json();
       message = formatErrorPayload(payload, message);
     } else {
@@ -206,4 +222,87 @@ export async function downloadDocumentPdf(token: string, documentId: number): Pr
   }
 
   return response.blob();
+}
+
+export async function listProjects(token: string): Promise<ProjectSummary[]> {
+  return request<ProjectSummary[]>("/projects", {
+    headers: { ...getAuthHeaders(token) },
+  });
+}
+
+export async function getProjectDetail(
+  token: string,
+  projectNumber: string,
+): Promise<ProjectDetail> {
+  return request<ProjectDetail>(`/projects/${projectNumber}`, {
+    headers: { ...getAuthHeaders(token) },
+  });
+}
+
+export async function pullDocumentsForProject(
+  token: string,
+  projectNumber: string,
+  documentIds: number[],
+): Promise<ProjectPullResponse> {
+  return request<ProjectPullResponse>(`/projects/${projectNumber}/pull`, {
+    method: "POST",
+    headers: { ...getAuthHeaders(token) },
+    body: JSON.stringify({ document_ids: documentIds }),
+  });
+}
+
+export async function markWorkingReady(
+  token: string,
+  projectNumber: string,
+  workingRevisionId: number,
+): Promise<WorkingRevisionStatusResponse> {
+  return request<WorkingRevisionStatusResponse>(
+    `/projects/${projectNumber}/working/${workingRevisionId}/ready`,
+    {
+      method: "POST",
+      headers: { ...getAuthHeaders(token) },
+    },
+  );
+}
+
+export async function abandonWorkingRevision(
+  token: string,
+  projectNumber: string,
+  workingRevisionId: number,
+): Promise<WorkingRevisionStatusResponse> {
+  return request<WorkingRevisionStatusResponse>(
+    `/projects/${projectNumber}/working/${workingRevisionId}/abandon`,
+    {
+      method: "POST",
+      headers: { ...getAuthHeaders(token) },
+    },
+  );
+}
+
+export async function mergeProjectToPlant(
+  token: string,
+  projectNumber: string,
+): Promise<ProjectMergeResponse> {
+  return request<ProjectMergeResponse>(`/projects/${projectNumber}/merge`, {
+    method: "POST",
+    headers: { ...getAuthHeaders(token) },
+  });
+}
+
+export async function seedDemoData(token: string): Promise<DemoSeedResponse> {
+  return request<DemoSeedResponse>("/documents/admin/dev/seed-demo", {
+    method: "POST",
+    headers: {
+      ...getAuthHeaders(token),
+    },
+  });
+}
+
+export async function resetDemoData(token: string): Promise<DemoSeedResponse> {
+  return request<DemoSeedResponse>("/documents/admin/dev/reset-demo", {
+    method: "POST",
+    headers: {
+      ...getAuthHeaders(token),
+    },
+  });
 }

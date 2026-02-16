@@ -5,8 +5,10 @@ React + Vite frontend for the EDMS backend.
 ## Features
 - Demo login (`/auth/login`)
 - Profile check (`/auth/me`)
-- Dashboard summary (`/documents/reports/dashboard-summary`)
-- Document search (`/documents/search`)
+- Projects summary + project detail workflow (`/projects`)
+- Pull selected documents into project working sets
+- Mark READY / Abandon / Merge to Plant from project detail
+- Document search (`/documents` and `/documents/search`)
 
 ## Run locally
 ```bash

@@ -1,6 +1,16 @@
-import { ChangeEvent, DragEvent, FormEvent, useMemo, useRef, useState } from 'react';
-import { uploadPdfDocuments } from '../api';
-import type { SearchDocument } from '../types';
+import {
+  ChangeEvent,
+  DragEvent,
+  FormEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { uploadPdfDocuments } from "../api";
+import type { SearchDocument } from "../types";
+import Banner from "./ui/Banner";
+import Button from "./ui/Button";
+import Card from "./ui/Card";
 
 interface DocumentCreatePanelProps {
   token: string;
@@ -9,13 +19,18 @@ interface DocumentCreatePanelProps {
 
 function filterPdfFiles(fileList: FileList | File[]): File[] {
   return Array.from(fileList).filter(
-    (file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    (file) =>
+      file.type === "application/pdf" ||
+      file.name.toLowerCase().endsWith(".pdf"),
   );
 }
 
-export default function DocumentCreatePanel({ token, onCreated }: DocumentCreatePanelProps): JSX.Element {
-  const [projectCode, setProjectCode] = useState('PRJ-1');
-  const [discipline, setDiscipline] = useState('General');
+export default function DocumentCreatePanel({
+  token,
+  onCreated,
+}: DocumentCreatePanelProps): JSX.Element {
+  const [projectCode, setProjectCode] = useState("PRJ-1");
+  const [discipline, setDiscipline] = useState("General");
   const [files, setFiles] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -35,7 +50,7 @@ export default function DocumentCreatePanel({ token, onCreated }: DocumentCreate
 
   function addFiles(newFiles: File[]): void {
     if (!newFiles.length) {
-      setError('Only PDF files are supported right now.');
+      setError("Only PDF files are supported right now.");
       return;
     }
 
@@ -45,8 +60,10 @@ export default function DocumentCreatePanel({ token, onCreated }: DocumentCreate
       const incoming = newFiles.filter(
         (newFile) =>
           !existing.some(
-            (currentFile) => currentFile.name === newFile.name && currentFile.size === newFile.size
-          )
+            (currentFile) =>
+              currentFile.name === newFile.name &&
+              currentFile.size === newFile.size,
+          ),
       );
       return [...existing, ...incoming];
     });
@@ -58,7 +75,7 @@ export default function DocumentCreatePanel({ token, onCreated }: DocumentCreate
     }
 
     addFiles(filterPdfFiles(event.target.files));
-    event.target.value = '';
+    event.target.value = "";
   }
 
   function handleDrop(event: DragEvent<HTMLDivElement>): void {
@@ -68,16 +85,20 @@ export default function DocumentCreatePanel({ token, onCreated }: DocumentCreate
   }
 
   function removeFile(targetIndex: number): void {
-    setFiles((existing) => existing.filter((_, index) => index !== targetIndex));
+    setFiles((existing) =>
+      existing.filter((_, index) => index !== targetIndex),
+    );
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ): Promise<void> {
     event.preventDefault();
     setError(null);
     setSuccessMessage(null);
 
     if (!files.length) {
-      setError('Please drop at least one PDF file or use the file picker.');
+      setError("Please drop at least one PDF file or use the file picker.");
       return;
     }
 
@@ -85,52 +106,59 @@ export default function DocumentCreatePanel({ token, onCreated }: DocumentCreate
 
     try {
       const payload = new FormData();
-      payload.append('project_code', projectCode);
-      payload.append('discipline', discipline);
+      payload.append("project_code", projectCode);
+      payload.append("discipline", discipline);
       files.forEach((file) => {
-        payload.append('files', file, file.name);
+        payload.append("files", file, file.name);
       });
 
       const result = await uploadPdfDocuments(token, payload);
       result.items.forEach((document) => onCreated(document));
-      setSuccessMessage(`Created ${result.total_created} document record(s) from PDF selection.`);
+      setSuccessMessage(
+        `Created ${result.total_created} document record(s) from PDF selection.`,
+      );
       setFiles([]);
     } catch (submitError) {
       setError(
         submitError instanceof Error
           ? submitError.message
-          : 'Failed to create documents from selected PDFs'
+          : "Failed to create documents from selected PDFs",
       );
     } finally {
       setIsSubmitting(false);
     }
-
-    setIsSubmitting(false);
   }
 
   return (
-    <section className="card">
-      <h2>Add documents (PDF)</h2>
-      <p className="hint">
-        Drag & drop PDF files or pick from your folders. Files are sent to the backend as
-        multipart uploads.
-      </p>
-
+    <Card
+      title="Upload PDFs"
+      subtitle="Create document records directly from selected PDF files."
+    >
       <form onSubmit={handleSubmit} className="stack">
         <div className="field-grid">
-          <label>
-            Project code
-            <input value={projectCode} onChange={(event) => setProjectCode(event.target.value)} required />
+          <label className="field-label">
+            <span>Project code</span>
+            <input
+              className="input"
+              value={projectCode}
+              onChange={(e) => setProjectCode(e.target.value)}
+              required
+            />
           </label>
 
-          <label>
-            Discipline
-            <input value={discipline} onChange={(event) => setDiscipline(event.target.value)} required />
+          <label className="field-label">
+            <span>Discipline</span>
+            <input
+              className="input"
+              value={discipline}
+              onChange={(e) => setDiscipline(e.target.value)}
+              required
+            />
           </label>
         </div>
 
         <div
-          className={`dropzone ${isDragging ? 'is-dragging' : ''}`}
+          className={`dropzone ${isDragging ? "is-dragging" : ""}`}
           onDragOver={(event) => {
             event.preventDefault();
             setIsDragging(true);
@@ -141,7 +169,7 @@ export default function DocumentCreatePanel({ token, onCreated }: DocumentCreate
           tabIndex={0}
           onClick={() => fileInputRef.current?.click()}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
+            if (event.key === "Enter" || event.key === " ") {
               event.preventDefault();
               fileInputRef.current?.click();
             }
@@ -162,13 +190,18 @@ export default function DocumentCreatePanel({ token, onCreated }: DocumentCreate
         {files.length ? (
           <div className="file-list-wrap">
             <div className="list-meta">
-              <strong>{files.length}</strong> file(s) selected · <strong>{totalFileSizeLabel}</strong>
+              <strong>{files.length}</strong> file(s) selected ·{" "}
+              <strong>{totalFileSizeLabel}</strong>
             </div>
             <ul className="file-list">
               {files.map((file, index) => (
                 <li key={`${file.name}-${file.size}`}>
                   <span>{file.name}</span>
-                  <button type="button" className="subtle-button" onClick={() => removeFile(index)}>
+                  <button
+                    type="button"
+                    className="subtle-button"
+                    onClick={() => removeFile(index)}
+                  >
                     Remove
                   </button>
                 </li>
@@ -177,13 +210,15 @@ export default function DocumentCreatePanel({ token, onCreated }: DocumentCreate
           </div>
         ) : null}
 
-        <button type="submit" disabled={isSubmitting || !files.length}>
-          {isSubmitting ? 'Creating…' : 'Create document records'}
-        </button>
+        <Button type="submit" disabled={isSubmitting || !files.length}>
+          {isSubmitting ? "Creating…" : "Create document records"}
+        </Button>
       </form>
 
-      {successMessage ? <p className="success">{successMessage}</p> : null}
-      {error ? <p className="error">{error}</p> : null}
-    </section>
+      {successMessage ? (
+        <Banner tone="success" message={successMessage} />
+      ) : null}
+      {error ? <Banner tone="error" message={error} /> : null}
+    </Card>
   );
 }

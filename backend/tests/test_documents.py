@@ -3,7 +3,16 @@ from sqlmodel import Session, delete
 
 from app.db import engine, init_db
 from app.main import app
-from app.models import Approval, AuditEvent, Branch, Document, DocumentRevision, Transmittal
+from app.models import (
+    Approval,
+    AuditEvent,
+    Branch,
+    Document,
+    DocumentRevision,
+    Project,
+    ProjectWorkingRevision,
+    Transmittal,
+)
 
 client = TestClient(app)
 
@@ -17,6 +26,8 @@ def auth_headers(email: str, password: str) -> dict[str, str]:
 def reset_db() -> None:
     init_db()
     with Session(engine) as session:
+        session.exec(delete(ProjectWorkingRevision))
+        session.exec(delete(Project))
         session.exec(delete(AuditEvent))
         session.exec(delete(Transmittal))
         session.exec(delete(Approval))
@@ -44,7 +55,9 @@ def test_commit_push_pull_and_history_flow():
     document_id = doc.json()["id"]
 
     main_branch = client.post(
-        f"/documents/{document_id}/branches", headers=engineer_headers, json={"name": "main"}
+        f"/documents/{document_id}/branches",
+        headers=engineer_headers,
+        json={"name": "main"},
     )
     assert main_branch.status_code == 200
     main_branch_id = main_branch.json()["id"]
@@ -71,7 +84,9 @@ def test_commit_push_pull_and_history_flow():
     assert commit.status_code == 200
     assert commit.json()["is_pushed"] is False
 
-    push = client.post(f"/documents/branches/{moc_branch_id}/push", headers=engineer_headers)
+    push = client.post(
+        f"/documents/branches/{moc_branch_id}/push", headers=engineer_headers
+    )
     assert push.status_code == 200
     assert push.json()["pushed_count"] == 1
     assert push.json()["latest_revision"] == "B"
@@ -104,7 +119,9 @@ def test_compare_revisions_returns_changed_fields():
     document_id = doc.json()["id"]
 
     branch = client.post(
-        f"/documents/{document_id}/branches", headers=engineer_headers, json={"name": "main"}
+        f"/documents/{document_id}/branches",
+        headers=engineer_headers,
+        json={"name": "main"},
     )
     assert branch.status_code == 200
 
@@ -134,7 +151,10 @@ def test_compare_revisions_returns_changed_fields():
 
     comparison = client.get(
         f"/documents/{document_id}/compare",
-        params={"from_revision_id": rev_a.json()["id"], "to_revision_id": rev_b.json()["id"]},
+        params={
+            "from_revision_id": rev_a.json()["id"],
+            "to_revision_id": rev_b.json()["id"],
+        },
     )
     assert comparison.status_code == 200
 
@@ -232,12 +252,16 @@ def test_document_search_transmittal_audit_and_dashboard_flow():
     assert doc.status_code == 200
     doc_id = doc.json()["id"]
 
-    search = client.get("/documents/search", params={"q": "Pump", "discipline": "Mechanical"})
+    search = client.get(
+        "/documents/search", params={"q": "Pump", "discipline": "Mechanical"}
+    )
     assert search.status_code == 200
     assert search.json()["total"] == 1
 
     branch = client.post(
-        f"/documents/{doc_id}/branches", headers=controller_headers, json={"name": "main"}
+        f"/documents/{doc_id}/branches",
+        headers=controller_headers,
+        json={"name": "main"},
     )
     assert branch.status_code == 200
 
@@ -294,11 +318,12 @@ def test_document_search_transmittal_audit_and_dashboard_flow():
     assert audit.status_code == 200
     assert len(audit.json()) >= 3
 
-    summary = client.get("/documents/reports/dashboard-summary", headers=controller_headers)
+    summary = client.get(
+        "/documents/reports/dashboard-summary", headers=controller_headers
+    )
     assert summary.status_code == 200
     assert summary.json()["total_documents"] == 1
     assert summary.json()["total_transmittals"] == 1
-
 
 
 def test_pdf_upload_creates_documents_from_multipart_files():
@@ -311,7 +336,9 @@ def test_pdf_upload_creates_documents_from_multipart_files():
     ]
     data = {"project_code": "PRJ-9", "discipline": "General"}
 
-    response = client.post("/documents/upload-pdf", headers=headers, data=data, files=files)
+    response = client.post(
+        "/documents/upload-pdf", headers=headers, data=data, files=files
+    )
 
     assert response.status_code == 200
     payload = response.json()
@@ -325,10 +352,14 @@ def test_pull_for_revision_and_download_pdf():
     reset_db()
     headers = auth_headers("user@edms.local", "user123")
 
-    files = [("files", ("instrument list.pdf", b"%PDF-1.7\nmock-pdf", "application/pdf"))]
+    files = [
+        ("files", ("instrument list.pdf", b"%PDF-1.7\nmock-pdf", "application/pdf"))
+    ]
     data = {"project_code": "PRJ-10", "discipline": "Instrumentation"}
 
-    created = client.post("/documents/upload-pdf", headers=headers, data=data, files=files)
+    created = client.post(
+        "/documents/upload-pdf", headers=headers, data=data, files=files
+    )
     assert created.status_code == 200
     doc_id = created.json()["items"][0]["id"]
 
@@ -341,3 +372,13 @@ def test_pull_for_revision_and_download_pdf():
     assert download.status_code == 200
     assert download.headers["content-type"].startswith("application/pdf")
     assert download.content.startswith(b"%PDF")
+
+
+def test_demo_seed_endpoints_require_flag():
+    headers = auth_headers("user@edms.local", "user123")
+
+    seed_response = client.post("/documents/admin/dev/seed-demo", headers=headers)
+    reset_response = client.post("/documents/admin/dev/reset-demo", headers=headers)
+
+    assert seed_response.status_code == 403
+    assert reset_response.status_code == 403

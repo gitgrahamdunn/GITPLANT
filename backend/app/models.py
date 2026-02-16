@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional
+from uuid import uuid4
 
 from sqlmodel import Field, SQLModel
 
@@ -74,3 +75,32 @@ class AuditEvent(SQLModel, table=True):
     actor_email: str = Field(index=True)
     details: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Project(SQLModel, table=True):
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    project_number: str = Field(index=True, unique=True)
+    name: str | None = None
+    description: str | None = None
+    status: str = Field(default="ACTIVE", index=True)
+    created_by: str = Field(index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ProjectWorkingRevision(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: str = Field(foreign_key="project.id", index=True)
+    document_id: int = Field(foreign_key="document.id", index=True)
+    base_revision_id: Optional[int] = Field(
+        default=None, foreign_key="documentrevision.id", index=True
+    )
+    merged_revision_id: Optional[int] = Field(
+        default=None, foreign_key="documentrevision.id", index=True
+    )
+    working_revision_label: str = Field(default="WIP")
+    status: str = Field(default="WORKING", index=True)
+    pulled_by: str = Field(index=True)
+    file_path: str | None = None
+    notes: str | None = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
