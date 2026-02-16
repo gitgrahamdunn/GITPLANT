@@ -1,14 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchDashboard, fetchMe, resetDemoData, seedDemoData } from "./api";
+import {
+  fetchDashboard,
+  fetchMe,
+  getProjectDetail,
+  listProjects,
+  pullDocumentsForProject,
+  resetDemoData,
+  seedDemoData,
+} from "./api";
 import DashboardPanel from "./components/DashboardPanel";
 import DocumentCreatePanel from "./components/DocumentCreatePanel";
 import DocumentSearchPanel from "./components/DocumentSearchPanel";
 import LoginPanel from "./components/LoginPanel";
+import ProjectDetailPanel from "./components/ProjectDetailPanel";
+import ProjectsSummaryPanel from "./components/ProjectsSummaryPanel";
 import Button from "./components/ui/Button";
 import Card from "./components/ui/Card";
 import Skeleton from "./components/ui/Skeleton";
 import Toast from "./components/ui/Toast";
 import type {
+  DashboardSummary,
   MeResponse,
   ProjectDetail,
   ProjectSummary,
@@ -17,7 +28,7 @@ import type {
 
 const STORAGE_KEY = "gitplant.token";
 
-type NavSection = "projects" | "documents" | "upload" | "audit";
+type NavSection = "dashboard" | "projects" | "documents" | "upload" | "audit";
 
 export default function App(): JSX.Element {
   const [token, setToken] = useState<string | null>(() =>
@@ -25,12 +36,15 @@ export default function App(): JSX.Element {
   );
   const [me, setMe] = useState<MeResponse | null>(null);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [activeProjectNumber, setActiveProjectNumber] = useState<string | null>(
+    null,
+  );
+  const [activeProject, setActiveProject] = useState<ProjectDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchRefreshKey, setSearchRefreshKey] = useState(0);
-  const [createdDocuments, setCreatedDocuments] = useState<SearchDocument[]>(
-    [],
-  );
+  const [createdDocuments, setCreatedDocuments] = useState<SearchDocument[]>([]);
   const [activeSection, setActiveSection] = useState<NavSection>("dashboard");
   const [toast, setToast] = useState<string | null>(null);
   const [isRunningDemoAction, setIsRunningDemoAction] = useState(false);
@@ -52,15 +66,6 @@ export default function App(): JSX.Element {
       return;
     }
 
-    const timeout = window.setTimeout(() => setToast(null), 2600);
-    return () => window.clearTimeout(timeout);
-  }, [toast]);
-
-  useEffect(() => {
-    if (!toast) {
-      return;
-    }
-
     const timeout = window.setTimeout(() => setToast(null), 2400);
     return () => window.clearTimeout(timeout);
   }, [toast]);
@@ -68,6 +73,7 @@ export default function App(): JSX.Element {
   useEffect(() => {
     if (!token) {
       setMe(null);
+      setSummary(null);
       setProjects([]);
       setActiveProjectNumber(null);
       setActiveProject(null);
@@ -82,8 +88,12 @@ export default function App(): JSX.Element {
       setError(null);
       setIsLoading(true);
       try {
-        const profile = await fetchMe(authToken);
+        const [profile, dashboard] = await Promise.all([
+          fetchMe(authToken),
+          fetchDashboard(authToken),
+        ]);
         setMe(profile);
+        setSummary(dashboard);
         await refreshProjects(authToken);
       } catch (loadError) {
         setError(
@@ -114,6 +124,7 @@ export default function App(): JSX.Element {
   function handleLogout(): void {
     setToken(null);
     setMe(null);
+    setSummary(null);
     setProjects([]);
     setActiveProjectNumber(null);
     setActiveProject(null);
@@ -142,6 +153,7 @@ export default function App(): JSX.Element {
       );
       const dashboard = await fetchDashboard(token);
       setSummary(dashboard);
+      await refreshProjects(token);
     } catch (demoError) {
       setError(
         demoError instanceof Error ? demoError.message : "Demo action failed",
@@ -151,12 +163,58 @@ export default function App(): JSX.Element {
     }
   }
 
+  async function handlePullForProject(
+    documentIds: number[],
+    projectNumber: string,
+  ): Promise<void> {
+    if (!token) {
+      return;
+    }
+
+    const result = await pullDocumentsForProject(token, projectNumber, documentIds);
+    await refreshProjects(token);
+    const skipped = result.skipped_document_ids.length;
+    setToast(
+      `Pulled ${result.created.length} document(s) into ${result.project_number}${skipped ? ` (${skipped} skipped)` : ""}.`,
+    );
+    setActiveProjectNumber(result.project_number);
+    setActiveProject(await getProjectDetail(token, result.project_number));
+    setActiveSection("projects");
+  }
+
+  async function refreshActiveProject(): Promise<void> {
+    if (!token || !activeProjectNumber) {
+      return;
+    }
+
+    setActiveProject(await getProjectDetail(token, activeProjectNumber));
+  }
+
+  async function handleProjectMerged(): Promise<void> {
+    if (!token) {
+      return;
+    }
+
+    await refreshProjects(token);
+    setSummary(await fetchDashboard(token));
+    setSearchRefreshKey((value) => value + 1);
+    setToast("Project merged into plant revisions.");
+  }
+
   function handleDocumentCreated(document: SearchDocument): void {
     setSearchRefreshKey((value) => value + 1);
     setCreatedDocuments((existing) => [
       document,
       ...existing.filter((item) => item.id !== document.id),
     ]);
+    setSummary((existing) =>
+      existing
+        ? {
+            ...existing,
+            total_documents: existing.total_documents + 1,
+          }
+        : existing,
+    );
     setToast("Document record created successfully.");
   }
 
@@ -168,6 +226,7 @@ export default function App(): JSX.Element {
         <nav className="stack-sm" aria-label="Primary">
           {[
             ["dashboard", "Dashboard"],
+            ["projects", "Projects"],
             ["documents", "Documents"],
             ["upload", "Upload PDFs"],
             ["audit", "Audit"],
@@ -195,11 +254,7 @@ export default function App(): JSX.Element {
               title="Session"
               subtitle={`Signed in as ${me.email} (${me.role}).`}
               actions={
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={handleLogout}
-                >
+                <Button type="button" variant="secondary" onClick={handleLogout}>
                   Sign out
                 </Button>
               }
@@ -243,11 +298,26 @@ export default function App(): JSX.Element {
               <DashboardPanel summary={summary} />
             ) : null}
 
-            {(activeSection === "upload" || activeSection === "documents") && (
-              <DocumentCreatePanel
-                token={token!}
-                onCreated={handleDocumentCreated}
+            {(activeSection === "dashboard" || activeSection === "projects") && (
+              <ProjectsSummaryPanel
+                projects={projects}
+                onOpenProject={(projectNumber) => {
+                  void openProject(projectNumber);
+                }}
               />
+            )}
+
+            {activeSection === "projects" && activeProject ? (
+              <ProjectDetailPanel
+                token={token!}
+                project={activeProject}
+                onRefresh={refreshActiveProject}
+                onMerged={handleProjectMerged}
+              />
+            ) : null}
+
+            {(activeSection === "upload" || activeSection === "documents") && (
+              <DocumentCreatePanel token={token!} onCreated={handleDocumentCreated} />
             )}
 
             {(activeSection === "documents" || activeSection === "audit") && (
@@ -255,6 +325,7 @@ export default function App(): JSX.Element {
                 token={token!}
                 refreshKey={searchRefreshKey}
                 createdDocuments={createdDocuments}
+                onPullForProject={handlePullForProject}
               />
             )}
           </>

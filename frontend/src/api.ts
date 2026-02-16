@@ -5,6 +5,7 @@ import type {
   DocumentSearchResponse,
   LoginResponse,
   MeResponse,
+  DashboardSummary,
   ProjectDetail,
   ProjectMergeResponse,
   ProjectPullResponse,
@@ -115,6 +116,16 @@ export async function login(
   return request<LoginResponse>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function fetchDashboard(
+  token: string,
+): Promise<DashboardSummary> {
+  return request<DashboardSummary>("/documents/reports/dashboard-summary", {
+    headers: {
+      ...getAuthHeaders(token),
+    },
   });
 }
 
