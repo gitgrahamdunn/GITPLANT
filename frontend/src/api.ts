@@ -1,11 +1,15 @@
 import type {
   DashboardSummary,
+  DocumentCreateRequest,
   DocumentSearchResponse,
   LoginResponse,
-  MeResponse
+  MeResponse,
+  SearchDocument
 } from './types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+const API_BASE_URL =
+  (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
+    ?.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 function formatErrorPayload(payload: unknown, fallback: string): string {
   if (!payload || typeof payload !== 'object') {
@@ -82,6 +86,20 @@ export async function fetchDashboard(token: string): Promise<DashboardSummary> {
   });
 }
 
+
+
+export async function createDocument(
+  token: string,
+  payload: DocumentCreateRequest
+): Promise<SearchDocument> {
+  return request<SearchDocument>('/documents', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+}
 export async function searchDocuments(
   token: string,
   query: string

@@ -1,4 +1,4 @@
-export type Role = 'document_controller' | 'engineer' | 'approver';
+export type Role = 'user';
 
 export interface LoginResponse {
   access_token: string;
@@ -32,4 +32,11 @@ export interface SearchDocument {
 export interface DocumentSearchResponse {
   total: number;
   items: SearchDocument[];
+}
+
+export interface DocumentCreateRequest {
+  project_code: string;
+  document_number: string;
+  title: string;
+  discipline: string;
 }

@@ -73,7 +73,7 @@ def _deserialize_datetimes(row: dict, fields: list[str]) -> dict:
 def create_document(
     payload: DocumentCreateRequest,
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_roles("document_controller", "engineer")),
+    current_user: CurrentUser = Depends(require_roles("user")),
 ):
     existing = session.exec(
         select(Document).where(Document.document_number == payload.document_number)
@@ -132,7 +132,7 @@ def search_documents(
 )
 def dashboard_summary(
     session: Session = Depends(get_session),
-    _: CurrentUser = Depends(require_roles("document_controller", "approver")),
+    _: CurrentUser = Depends(require_roles("user")),
 ):
     documents = session.exec(select(Document)).all()
     approvals = session.exec(select(Approval)).all()
@@ -154,7 +154,7 @@ def dashboard_summary(
 )
 def dashboard_extended(
     session: Session = Depends(get_session),
-    _: CurrentUser = Depends(require_roles("document_controller", "approver")),
+    _: CurrentUser = Depends(require_roles("user")),
 ):
     documents = session.exec(select(Document)).all()
 
@@ -185,7 +185,7 @@ def create_branch(
     document_id: int,
     payload: BranchCreateRequest,
     session: Session = Depends(get_session),
-    _: CurrentUser = Depends(require_roles("document_controller", "engineer")),
+    _: CurrentUser = Depends(require_roles("user")),
 ):
     document = session.get(Document, document_id)
     if not document:
@@ -210,7 +210,7 @@ def commit_document_revision(
     payload: CommitRequest,
     branch: str,
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_roles("engineer", "document_controller")),
+    current_user: CurrentUser = Depends(require_roles("user")),
 ):
     document = session.get(Document, document_id)
     if not document:
@@ -260,7 +260,7 @@ def commit_document_revision(
 def push_branch(
     branch_id: int,
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_roles("engineer", "document_controller")),
+    current_user: CurrentUser = Depends(require_roles("user")),
 ):
     branch = session.get(Branch, branch_id)
     if not branch:
@@ -421,7 +421,7 @@ def submit_for_approval(
     document_id: int,
     payload: SubmitForApprovalRequest,
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_roles("engineer", "document_controller")),
+    current_user: CurrentUser = Depends(require_roles("user")),
 ):
     document = session.get(Document, document_id)
     if not document:
@@ -466,7 +466,7 @@ def decide_approval(
     approval_id: int,
     payload: ApproveRequest,
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_roles("approver", "document_controller")),
+    current_user: CurrentUser = Depends(require_roles("user")),
 ):
     document = session.get(Document, document_id)
     if not document:
@@ -511,7 +511,7 @@ def create_transmittal(
     document_id: int,
     payload: CreateTransmittalRequest,
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_roles("document_controller", "engineer")),
+    current_user: CurrentUser = Depends(require_roles("user")),
 ):
     document = session.get(Document, document_id)
     if not document:
@@ -589,7 +589,7 @@ def list_audit_events(document_id: int, session: Session = Depends(get_session))
 def export_audit_events_csv(
     document_id: int,
     session: Session = Depends(get_session),
-    _: CurrentUser = Depends(require_roles("document_controller", "approver")),
+    _: CurrentUser = Depends(require_roles("user")),
 ):
     document = session.get(Document, document_id)
     if not document:
@@ -622,7 +622,7 @@ def export_audit_events_csv(
 def export_audit_events_jsonl(
     document_id: int,
     session: Session = Depends(get_session),
-    _: CurrentUser = Depends(require_roles("document_controller", "approver")),
+    _: CurrentUser = Depends(require_roles("user")),
 ):
     document = session.get(Document, document_id)
     if not document:
@@ -665,7 +665,7 @@ def export_audit_events_jsonl(
 )
 def create_backup_snapshot(
     session: Session = Depends(get_session),
-    _: CurrentUser = Depends(require_roles("document_controller")),
+    _: CurrentUser = Depends(require_roles("user")),
 ):
     snapshot = {
         "documents": [d.model_dump(mode="json") for d in session.exec(select(Document)).all()],
@@ -685,7 +685,7 @@ def create_backup_snapshot(
 def restore_backup_snapshot(
     payload: RestoreSnapshotRequest,
     session: Session = Depends(get_session),
-    _: CurrentUser = Depends(require_roles("document_controller")),
+    _: CurrentUser = Depends(require_roles("user")),
 ):
     snapshot = payload.snapshot
 

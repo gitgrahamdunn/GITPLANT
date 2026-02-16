@@ -1,21 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchDashboard, fetchMe } from './api';
 import DashboardPanel from './components/DashboardPanel';
+import DocumentCreatePanel from './components/DocumentCreatePanel';
 import DocumentSearchPanel from './components/DocumentSearchPanel';
 import LoginPanel from './components/LoginPanel';
 import type { DashboardSummary, MeResponse } from './types';
 
 const STORAGE_KEY = 'gitplant.token';
 
-function canViewDashboard(role: MeResponse['role']): boolean {
-  return role === 'document_controller' || role === 'approver';
-}
-
 export default function App(): JSX.Element {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(STORAGE_KEY));
   const [me, setMe] = useState<MeResponse | null>(null);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [searchRefreshKey, setSearchRefreshKey] = useState(0);
 
   const isAuthed = useMemo(() => Boolean(token && me), [token, me]);
 
@@ -27,20 +25,16 @@ export default function App(): JSX.Element {
       return;
     }
 
-    localStorage.setItem(STORAGE_KEY, token);
+    const authToken = token;
+    localStorage.setItem(STORAGE_KEY, authToken);
 
     async function loadData(): Promise<void> {
       setError(null);
       try {
-        const profile = await fetchMe(token);
+        const profile = await fetchMe(authToken);
         setMe(profile);
-
-        if (canViewDashboard(profile.role)) {
-          const dashboard = await fetchDashboard(token);
-          setSummary(dashboard);
-        } else {
-          setSummary(null);
-        }
+        const dashboard = await fetchDashboard(authToken);
+        setSummary(dashboard);
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Failed to load app data');
         setToken(null);
@@ -56,6 +50,10 @@ export default function App(): JSX.Element {
     setSummary(null);
     setError(null);
     localStorage.removeItem(STORAGE_KEY);
+  }
+
+  function handleDocumentCreated(): void {
+    setSearchRefreshKey((value) => value + 1);
   }
 
   return (
@@ -81,16 +79,10 @@ export default function App(): JSX.Element {
             </button>
           </section>
 
-          {summary ? (
-            <DashboardPanel summary={summary} />
-          ) : (
-            <section className="card">
-              <h2>Dashboard summary</h2>
-              <p className="hint">Dashboard metrics are available for approver and document controller roles.</p>
-            </section>
-          )}
+          {summary ? <DashboardPanel summary={summary} /> : null}
 
-          <DocumentSearchPanel token={token!} />
+          <DocumentCreatePanel token={token!} onCreated={handleDocumentCreated} />
+          <DocumentSearchPanel token={token!} refreshKey={searchRefreshKey} />
         </>
       ) : null}
     </main>

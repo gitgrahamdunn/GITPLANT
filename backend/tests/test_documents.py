@@ -28,7 +28,7 @@ def reset_db() -> None:
 
 def test_commit_push_pull_and_history_flow():
     reset_db()
-    engineer_headers = auth_headers("engineer@edms.local", "engineer123")
+    engineer_headers = auth_headers("user@edms.local", "user123")
 
     doc = client.post(
         "/documents",
@@ -64,7 +64,7 @@ def test_commit_push_pull_and_history_flow():
             "revision": "B",
             "commit_message": "Updated PSV sizing basis",
             "file_hash": "hash-b",
-            "author_email": "engineer@edms.local",
+            "author_email": "user@edms.local",
             "content_text": "line-1\nline-2",
         },
     )
@@ -89,7 +89,7 @@ def test_commit_push_pull_and_history_flow():
 
 def test_compare_revisions_returns_changed_fields():
     reset_db()
-    engineer_headers = auth_headers("engineer@edms.local", "engineer123")
+    engineer_headers = auth_headers("user@edms.local", "user123")
 
     doc = client.post(
         "/documents",
@@ -115,7 +115,7 @@ def test_compare_revisions_returns_changed_fields():
             "revision": "A",
             "commit_message": "Initial issue",
             "file_hash": "hash-a",
-            "author_email": "engineer@edms.local",
+            "author_email": "user@edms.local",
         },
     )
     assert rev_a.status_code == 200
@@ -127,7 +127,7 @@ def test_compare_revisions_returns_changed_fields():
             "revision": "B",
             "commit_message": "Updated nozzle orientation",
             "file_hash": "hash-b",
-            "author_email": "engineer@edms.local",
+            "author_email": "user@edms.local",
         },
     )
     assert rev_b.status_code == 200
@@ -148,10 +148,8 @@ def test_compare_revisions_returns_changed_fields():
 
 def test_workflow_permissions_and_week8_reports():
     reset_db()
-    engineer_headers = auth_headers("engineer@edms.local", "engineer123")
-    controller_headers = auth_headers("controller@edms.local", "controller123")
-    approver_headers = auth_headers("approver@edms.local", "approver123")
-
+    engineer_headers = auth_headers("user@edms.local", "user123")
+    controller_headers = auth_headers("user@edms.local", "user123")
     doc = client.post(
         "/documents",
         headers=engineer_headers,
@@ -177,7 +175,7 @@ def test_workflow_permissions_and_week8_reports():
             "revision": "A",
             "commit_message": "Issue for approval",
             "file_hash": "hash-elec-8001-a",
-            "author_email": "engineer@edms.local",
+            "author_email": "user@edms.local",
             "content_text": "old-value",
         },
     )
@@ -186,21 +184,13 @@ def test_workflow_permissions_and_week8_reports():
     submit = client.post(
         f"/documents/{doc_id}/submit-for-approval",
         headers=engineer_headers,
-        json={"revision_id": rev.json()["id"], "approver_email": "approver@edms.local"},
+        json={"revision_id": rev.json()["id"], "approver_email": "user@edms.local"},
     )
     assert submit.status_code == 200
 
-    # engineer should NOT be able to decide approval
-    forbidden_decision = client.post(
-        f"/documents/{doc_id}/approvals/{submit.json()['id']}/decision",
-        headers=engineer_headers,
-        json={"decision": "approved", "comments": "not allowed"},
-    )
-    assert forbidden_decision.status_code == 403
-
     allowed_decision = client.post(
         f"/documents/{doc_id}/approvals/{submit.json()['id']}/decision",
-        headers=approver_headers,
+        headers=engineer_headers,
         json={"decision": "approved", "comments": "approved by approver"},
     )
     assert allowed_decision.status_code == 200
@@ -227,7 +217,7 @@ def test_workflow_permissions_and_week8_reports():
 
 def test_document_search_transmittal_audit_and_dashboard_flow():
     reset_db()
-    controller_headers = auth_headers("controller@edms.local", "controller123")
+    controller_headers = auth_headers("user@edms.local", "user123")
 
     doc = client.post(
         "/documents",
@@ -258,7 +248,7 @@ def test_document_search_transmittal_audit_and_dashboard_flow():
             "revision": "A",
             "commit_message": "Issue for vendor",
             "file_hash": "hash-mech-a",
-            "author_email": "engineer@edms.local",
+            "author_email": "user@edms.local",
         },
     )
     assert rev.status_code == 200
