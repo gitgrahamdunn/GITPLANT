@@ -299,3 +299,45 @@ def test_document_search_transmittal_audit_and_dashboard_flow():
     assert summary.json()["total_documents"] == 1
     assert summary.json()["total_transmittals"] == 1
 
+
+
+def test_pdf_upload_creates_documents_from_multipart_files():
+    reset_db()
+    headers = auth_headers("user@edms.local", "user123")
+
+    files = [
+        ("files", ("moc register.pdf", b"%PDF-1.7\nmock-1", "application/pdf")),
+        ("files", ("piping index.PDF", b"%PDF-1.7\nmock-2", "application/pdf")),
+    ]
+    data = {"project_code": "PRJ-9", "discipline": "General"}
+
+    response = client.post("/documents/upload-pdf", headers=headers, data=data, files=files)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_created"] == 2
+    assert len(payload["items"]) == 2
+    assert payload["items"][0]["document_number"] == "MOC-REGISTER"
+    assert payload["items"][1]["document_number"] == "PIPING-INDEX"
+
+
+def test_pull_for_revision_and_download_pdf():
+    reset_db()
+    headers = auth_headers("user@edms.local", "user123")
+
+    files = [("files", ("instrument list.pdf", b"%PDF-1.7\nmock-pdf", "application/pdf"))]
+    data = {"project_code": "PRJ-10", "discipline": "Instrumentation"}
+
+    created = client.post("/documents/upload-pdf", headers=headers, data=data, files=files)
+    assert created.status_code == 200
+    doc_id = created.json()["items"][0]["id"]
+
+    pull = client.post(f"/documents/{doc_id}/pull-for-revision", headers=headers)
+    assert pull.status_code == 200
+    assert pull.json()["document_id"] == doc_id
+    assert pull.json()["download_url"] == f"/documents/{doc_id}/download"
+
+    download = client.get(f"/documents/{doc_id}/download", headers=headers)
+    assert download.status_code == 200
+    assert download.headers["content-type"].startswith("application/pdf")
+    assert download.content.startswith(b"%PDF")

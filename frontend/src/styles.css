@@ -1,7 +1,10 @@
 :root {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: #0b1525;
-  background: #eef2f7;
+  color: #0f172a;
+  background:
+    radial-gradient(circle at top right, rgba(96, 165, 250, 0.16), transparent 40%),
+    radial-gradient(circle at top left, rgba(167, 139, 250, 0.14), transparent 45%),
+    #f8fafc;
 }
 
 * {
@@ -12,19 +15,28 @@ body {
   margin: 0;
 }
 
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
 .container {
-  max-width: 960px;
+  max-width: 1040px;
   margin: 0 auto;
-  padding: 2rem 1rem 3rem;
+  padding: 2.5rem 1rem 3rem;
   display: grid;
   gap: 1rem;
 }
 
 .card {
-  background: #fff;
-  border-radius: 12px;
-  border: 1px solid #d8dfeb;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  border: 1px solid #dbe5f4;
   padding: 1rem;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
 }
 
 .stack {
@@ -32,27 +44,46 @@ body {
   gap: 0.8rem;
 }
 
+.field-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
 .inline-form {
   display: flex;
   gap: 0.6rem;
+}
+
+label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.92rem;
+  color: #344256;
 }
 
 input,
 select,
 button {
   width: 100%;
-  padding: 0.55rem 0.7rem;
-  border-radius: 8px;
-  border: 1px solid #c5d1e2;
+  padding: 0.62rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid #cdd8eb;
   font: inherit;
+}
+
+input,
+select {
+  background: #f8fbff;
 }
 
 button {
   width: auto;
-  background: #1f6feb;
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
   color: #fff;
-  border-color: #1f6feb;
+  border-color: transparent;
   cursor: pointer;
+  font-weight: 600;
 }
 
 button:disabled {
@@ -60,16 +91,87 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.subtle-button {
+  background: transparent;
+  color: #4b5563;
+  border: 1px solid #d4deee;
+  padding: 0.3rem 0.55rem;
+}
+
 .hint {
-  color: #54627a;
+  color: #64748b;
+}
+
+.error,
+.success {
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
 }
 
 .error {
   color: #b42318;
   background: #fef3f2;
   border: 1px solid #fecdca;
-  border-radius: 8px;
-  padding: 0.6rem 0.8rem;
+}
+
+.success {
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+}
+
+.dropzone {
+  border: 1.5px dashed #9ab3df;
+  border-radius: 12px;
+  padding: 1rem;
+  text-align: center;
+  background: #f8fbff;
+  transition: all 0.18s ease;
+  cursor: pointer;
+}
+
+.dropzone.is-dragging {
+  border-color: #4f46e5;
+  background: #eef2ff;
+  transform: translateY(-1px);
+}
+
+.dropzone-title {
+  margin-bottom: 0.3rem;
+  font-weight: 600;
+  color: #243046;
+}
+
+.file-list-wrap {
+  border: 1px solid #dde6f4;
+  border-radius: 12px;
+  padding: 0.7rem;
+  background: #fff;
+}
+
+.list-meta {
+  color: #334155;
+  margin-bottom: 0.45rem;
+  font-size: 0.9rem;
+}
+
+.file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.file-list li {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #e6edf8;
+  border-radius: 10px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.9rem;
 }
 
 .stats-grid {
@@ -122,4 +224,11 @@ td {
   border-bottom: 1px solid #e4e9f2;
   padding: 0.5rem;
   font-size: 0.93rem;
+}
+
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
 }

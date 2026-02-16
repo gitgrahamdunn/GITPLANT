@@ -40,3 +40,17 @@ export interface DocumentCreateRequest {
   title: string;
   discipline: string;
 }
+
+
+export interface DocumentBatchCreateResponse {
+  total_created: number;
+  items: SearchDocument[];
+}
+
+
+export interface PullForRevisionResponse {
+  document_id: number;
+  document_number: string;
+  message: string;
+  download_url: string;
+}

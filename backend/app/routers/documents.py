@@ -3,8 +3,10 @@ import difflib
 import json
 from datetime import datetime
 from io import StringIO
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from fastapi.responses import FileResponse
 from sqlmodel import Session, col, delete, or_, select
 
 from app.db import get_session
@@ -20,9 +22,11 @@ from app.schemas import (
     DashboardExtendedResponse,
     DashboardSummaryResponse,
     DisciplineBreakdownItem,
+    DocumentBatchCreateResponse,
     DocumentCreateRequest,
     DocumentResponse,
     DocumentSearchResponse,
+    PullForRevisionResponse,
     PullResponse,
     PushResponse,
     RevisionCompareResponse,
@@ -38,6 +42,9 @@ from app.schemas import (
 from app.security import CurrentUser, get_current_user, require_roles
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+DOCUMENT_STORAGE_DIR = Path(__file__).resolve().parents[2] / "storage" / "documents"
+DOCUMENT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def record_audit_event(
@@ -95,6 +102,147 @@ def create_document(
     )
     session.commit()
     return document
+
+
+
+
+def _document_pdf_path(document_id: int) -> Path:
+    return DOCUMENT_STORAGE_DIR / f"{document_id}.pdf"
+
+
+def _to_document_number(file_name: str, index: int) -> str:
+    stem = file_name.rsplit('.', 1)[0].strip()
+    normalized = ''.join(ch if ch.isalnum() else '-' for ch in stem)
+    normalized = '-'.join(filter(None, normalized.split('-'))).upper()
+    if not normalized:
+        return f"PDF-{index + 1}"
+    return normalized
+
+
+@router.post(
+    "/upload-pdf",
+    response_model=DocumentBatchCreateResponse,
+    summary="Create document records from uploaded PDF files",
+)
+def create_documents_from_pdf_upload(
+    project_code: str = Form(...),
+    discipline: str = Form(...),
+    files: list[UploadFile] = File(...),
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(require_roles("user")),
+):
+    created_documents: list[Document] = []
+
+    for index, file in enumerate(files):
+        file_name = (file.filename or "").strip()
+        if not file_name.lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+        document_number = _to_document_number(file_name, index)
+        existing = session.exec(
+            select(Document).where(Document.document_number == document_number)
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Document number already exists: {document_number}",
+            )
+
+        title = file_name.rsplit('.', 1)[0].strip() or "Untitled PDF document"
+        document = Document(
+            project_code=project_code,
+            document_number=document_number,
+            title=title,
+            discipline=discipline,
+        )
+        session.add(document)
+        session.commit()
+        session.refresh(document)
+
+        file.file.seek(0)
+        destination = _document_pdf_path(document.id)
+        with destination.open("wb") as output_stream:
+            output_stream.write(file.file.read())
+
+        record_audit_event(
+            session,
+            document.id,
+            "document_created",
+            current_user.email,
+            f"Document {document.document_number} created from uploaded PDF {file_name}",
+        )
+        session.commit()
+        created_documents.append(document)
+
+    return DocumentBatchCreateResponse(total_created=len(created_documents), items=created_documents)
+
+
+@router.post(
+    "/{document_id}/pull-for-revision",
+    response_model=PullForRevisionResponse,
+    summary="Pull document file for revision",
+)
+def pull_document_for_revision(
+    document_id: int,
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(require_roles("user")),
+):
+    document = session.get(Document, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    pdf_path = _document_pdf_path(document_id)
+    if not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="No PDF file found for this document")
+
+    record_audit_event(
+        session,
+        document_id,
+        "document_pulled_for_revision",
+        current_user.email,
+        f"Document {document.document_number} pulled for revision",
+    )
+    session.commit()
+
+    return PullForRevisionResponse(
+        document_id=document_id,
+        document_number=document.document_number,
+        message="Document pulled for revision. You can now download and update the file.",
+        download_url=f"/documents/{document_id}/download",
+    )
+
+
+@router.get(
+    "/{document_id}/download",
+    summary="Download latest document PDF",
+)
+def download_document_file(
+    document_id: int,
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(require_roles("user")),
+):
+    document = session.get(Document, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    pdf_path = _document_pdf_path(document_id)
+    if not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="No PDF file found for this document")
+
+    record_audit_event(
+        session,
+        document_id,
+        "document_downloaded",
+        current_user.email,
+        f"Document {document.document_number} downloaded",
+    )
+    session.commit()
+
+    return FileResponse(
+        path=str(pdf_path),
+        media_type="application/pdf",
+        filename=f"{document.document_number}.pdf",
+    )
 
 
 @router.get("/search", response_model=DocumentSearchResponse, summary="Search documents")
