@@ -1,4 +1,4 @@
-export type Role = 'user';
+export type Role = "user";
 
 export interface LoginResponse {
   access_token: string;
@@ -41,16 +41,22 @@ export interface DocumentCreateRequest {
   discipline: string;
 }
 
-
 export interface DocumentBatchCreateResponse {
   total_created: number;
   items: SearchDocument[];
 }
-
 
 export interface PullForRevisionResponse {
   document_id: number;
   document_number: string;
   message: string;
   download_url: string;
+}
+
+export interface DemoSeedResponse {
+  status: string;
+  documents_created: number;
+  approvals_created: number;
+  audits_created: number;
+  warning: string;
 }

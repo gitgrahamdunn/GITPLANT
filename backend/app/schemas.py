@@ -41,12 +41,9 @@ class DocumentResponse(ORMResponseModel):
     current_revision: str
 
 
-
-
 class DocumentBatchCreateResponse(ORMResponseModel):
     total_created: int
     items: list[DocumentResponse]
-
 
 
 class PullForRevisionResponse(ORMResponseModel):
@@ -54,6 +51,7 @@ class PullForRevisionResponse(ORMResponseModel):
     document_number: str
     message: str
     download_url: str
+
 
 class BranchCreateRequest(BaseModel):
     name: str
@@ -202,3 +200,11 @@ class BackupSnapshotResponse(ORMResponseModel):
 
 class RestoreSnapshotRequest(BaseModel):
     snapshot: dict[str, list[dict[str, Any]]]
+
+
+class DemoSeedResponse(ORMResponseModel):
+    status: str
+    documents_created: int
+    approvals_created: int
+    audits_created: int
+    warning: str

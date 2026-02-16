@@ -12,3 +12,8 @@ frontend/dist/
 .env
 backend/.env
 frontend/.env
+
+# Runtime app data
+backend/.data/
+backend/storage/documents/
+frontend/*.tsbuildinfo
