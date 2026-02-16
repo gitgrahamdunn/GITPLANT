@@ -5,7 +5,7 @@ React + Vite frontend for the EDMS backend.
 ## Features
 - Demo login (`/auth/login`)
 - Profile check (`/auth/me`)
-- Dashboard summary (`/documents/reports/dashboard`)
+- Dashboard summary (`/documents/reports/dashboard-summary`)
 - Document search (`/documents/search`)
 
 ## Run locally

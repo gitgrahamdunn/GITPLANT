@@ -9,6 +9,7 @@ interface DocumentSearchPanelProps {
 export default function DocumentSearchPanel({ token }: DocumentSearchPanelProps): JSX.Element {
   const [query, setQuery] = useState('');
   const [documents, setDocuments] = useState<SearchDocument[]>([]);
+  const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,7 +19,8 @@ export default function DocumentSearchPanel({ token }: DocumentSearchPanelProps)
 
     try {
       const result = await searchDocuments(token, searchTerm);
-      setDocuments(result);
+      setDocuments(result.items);
+      setTotal(result.total);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Failed to load documents');
     } finally {
@@ -28,7 +30,7 @@ export default function DocumentSearchPanel({ token }: DocumentSearchPanelProps)
 
   useEffect(() => {
     void loadDocuments('');
-  }, []);
+  }, [token]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -42,13 +44,14 @@ export default function DocumentSearchPanel({ token }: DocumentSearchPanelProps)
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search by title, document number, or discipline"
+          placeholder="Search by title or document number"
         />
         <button type="submit" disabled={isLoading}>
           {isLoading ? 'Searching…' : 'Search'}
         </button>
       </form>
 
+      <p className="hint">{total} document(s) found.</p>
       {error ? <p className="error">{error}</p> : null}
 
       <div className="table-wrap">
@@ -60,16 +63,18 @@ export default function DocumentSearchPanel({ token }: DocumentSearchPanelProps)
               <th>Title</th>
               <th>Discipline</th>
               <th>Status</th>
+              <th>Current revision</th>
             </tr>
           </thead>
           <tbody>
             {documents.map((document) => (
               <tr key={document.id}>
                 <td>{document.id}</td>
-                <td>{document.doc_number}</td>
+                <td>{document.document_number}</td>
                 <td>{document.title}</td>
                 <td>{document.discipline}</td>
-                <td>{document.current_status}</td>
+                <td>{document.status}</td>
+                <td>{document.current_revision}</td>
               </tr>
             ))}
           </tbody>

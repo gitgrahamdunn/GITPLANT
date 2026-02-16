@@ -3,12 +3,12 @@ export type Role = 'document_controller' | 'engineer' | 'approver';
 export interface LoginResponse {
   access_token: string;
   token_type: string;
-  role: string;
+  role: Role;
 }
 
 export interface MeResponse {
   email: string;
-  role: string;
+  role: Role;
 }
 
 export interface DashboardSummary {
@@ -21,8 +21,15 @@ export interface DashboardSummary {
 
 export interface SearchDocument {
   id: number;
-  doc_number: string;
+  project_code: string;
+  document_number: string;
   title: string;
   discipline: string;
-  current_status: string;
+  status: string;
+  current_revision: string;
+}
+
+export interface DocumentSearchResponse {
+  total: number;
+  items: SearchDocument[];
 }

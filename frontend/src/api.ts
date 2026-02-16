@@ -1,9 +1,8 @@
 import type {
   DashboardSummary,
+  DocumentSearchResponse,
   LoginResponse,
-  MeResponse,
-  Role,
-  SearchDocument
+  MeResponse
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
@@ -32,7 +31,6 @@ export async function login(email: string, password: string): Promise<LoginRespo
   });
 }
 
-
 export async function fetchMe(token: string): Promise<MeResponse> {
   return request<MeResponse>('/auth/me', {
     headers: {
@@ -42,14 +40,17 @@ export async function fetchMe(token: string): Promise<MeResponse> {
 }
 
 export async function fetchDashboard(token: string): Promise<DashboardSummary> {
-  return request<DashboardSummary>('/documents/reports/dashboard', {
+  return request<DashboardSummary>('/documents/reports/dashboard-summary', {
     headers: {
       Authorization: `Bearer ${token}`
     }
   });
 }
 
-export async function searchDocuments(token: string, query: string): Promise<SearchDocument[]> {
+export async function searchDocuments(
+  token: string,
+  query: string
+): Promise<DocumentSearchResponse> {
   const params = new URLSearchParams();
   if (query.trim()) {
     params.set('q', query.trim());
@@ -57,7 +58,7 @@ export async function searchDocuments(token: string, query: string): Promise<Sea
 
   const suffix = params.toString() ? `?${params.toString()}` : '';
 
-  return request<SearchDocument[]>(`/documents/search${suffix}`, {
+  return request<DocumentSearchResponse>(`/documents/search${suffix}`, {
     headers: {
       Authorization: `Bearer ${token}`
     }
