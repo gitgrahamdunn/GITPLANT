@@ -9,8 +9,16 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from fastapi.responses import FileResponse
 from sqlmodel import Session, col, delete, or_, select
 
+from app.config import get_document_storage_path, settings
 from app.db import get_session
-from app.models import Approval, AuditEvent, Branch, Document, DocumentRevision, Transmittal
+from app.models import (
+    Approval,
+    AuditEvent,
+    Branch,
+    Document,
+    DocumentRevision,
+    Transmittal,
+)
 from app.schemas import (
     ApprovalResponse,
     ApproveRequest,
@@ -37,14 +45,14 @@ from app.schemas import (
     TransmittalResponse,
     TextDiffResponse,
     BackupSnapshotResponse,
+    DemoSeedResponse,
     RestoreSnapshotRequest,
 )
 from app.security import CurrentUser, get_current_user, require_roles
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-DOCUMENT_STORAGE_DIR = Path(__file__).resolve().parents[2] / "storage" / "documents"
-DOCUMENT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+DOCUMENT_STORAGE_DIR = get_document_storage_path()
 
 
 def record_audit_event(
@@ -61,6 +69,122 @@ def record_audit_event(
             actor_email=actor_email,
             details=details,
         )
+    )
+
+
+def _ensure_demo_tools_enabled() -> None:
+    if not settings.enable_demo_tools:
+        raise HTTPException(
+            status_code=403,
+            detail="Demo tooling is disabled. Set ENABLE_DEMO_TOOLS=true to use this endpoint.",
+        )
+
+
+def _clear_documents_and_storage(session: Session) -> None:
+    session.exec(delete(AuditEvent))
+    session.exec(delete(Transmittal))
+    session.exec(delete(Approval))
+    session.exec(delete(DocumentRevision))
+    session.exec(delete(Branch))
+    session.exec(delete(Document))
+    session.commit()
+
+    for path in DOCUMENT_STORAGE_DIR.glob("*.pdf"):
+        path.unlink(missing_ok=True)
+
+
+def _seed_demo_data(session: Session) -> DemoSeedResponse:
+    demo_documents = [
+        Document(
+            project_code="PRJ-DEMO",
+            document_number="CIV-1001",
+            title="Site layout drawing",
+            discipline="Civil",
+            status="IFA",
+            current_revision="B",
+        ),
+        Document(
+            project_code="PRJ-DEMO",
+            document_number="MECH-2201",
+            title="Pump datasheet",
+            discipline="Mechanical",
+            status="IFC",
+            current_revision="C",
+        ),
+        Document(
+            project_code="PRJ-DEMO",
+            document_number="ELEC-3104",
+            title="Cable schedule",
+            discipline="Electrical",
+            status="WIP",
+            current_revision="A",
+        ),
+    ]
+
+    for document in demo_documents:
+        session.add(document)
+    session.commit()
+    for document in demo_documents:
+        session.refresh(document)
+
+    branches: list[Branch] = []
+    revisions: list[DocumentRevision] = []
+    for idx, document in enumerate(demo_documents):
+        branch = Branch(document_id=document.id, name="main")
+        session.add(branch)
+        session.commit()
+        session.refresh(branch)
+        branches.append(branch)
+
+        revision = DocumentRevision(
+            document_id=document.id,
+            branch_id=branch.id,
+            revision=document.current_revision,
+            commit_message="Seeded demo revision",
+            file_hash=f"demo-hash-{idx + 1}",
+            author_email="user@edms.local",
+            content_text="Demo seeded content",
+            is_pushed=True,
+        )
+        session.add(revision)
+        session.commit()
+        session.refresh(revision)
+        revisions.append(revision)
+
+    approval = Approval(
+        document_id=demo_documents[0].id,
+        revision_id=revisions[0].id,
+        approver_email="approver@edms.local",
+        decision="approved",
+        comments="Seeded approval for demo walkthrough",
+        decided_at=datetime.utcnow(),
+    )
+    session.add(approval)
+
+    session.add(
+        AuditEvent(
+            document_id=demo_documents[0].id,
+            event_type="document_seeded",
+            actor_email="system@seed.local",
+            details="Demo document seeded with approval state",
+        )
+    )
+    session.add(
+        AuditEvent(
+            document_id=demo_documents[1].id,
+            event_type="transmittal_simulated",
+            actor_email="system@seed.local",
+            details="Demo transmittal event generated",
+        )
+    )
+    session.commit()
+
+    return DemoSeedResponse(
+        status="ok",
+        documents_created=len(demo_documents),
+        approvals_created=1,
+        audits_created=2,
+        warning="Development-only endpoint. Do not enable in production.",
     )
 
 
@@ -104,16 +228,14 @@ def create_document(
     return document
 
 
-
-
 def _document_pdf_path(document_id: int) -> Path:
     return DOCUMENT_STORAGE_DIR / f"{document_id}.pdf"
 
 
 def _to_document_number(file_name: str, index: int) -> str:
-    stem = file_name.rsplit('.', 1)[0].strip()
-    normalized = ''.join(ch if ch.isalnum() else '-' for ch in stem)
-    normalized = '-'.join(filter(None, normalized.split('-'))).upper()
+    stem = file_name.rsplit(".", 1)[0].strip()
+    normalized = "".join(ch if ch.isalnum() else "-" for ch in stem)
+    normalized = "-".join(filter(None, normalized.split("-"))).upper()
     if not normalized:
         return f"PDF-{index + 1}"
     return normalized
@@ -148,7 +270,7 @@ def create_documents_from_pdf_upload(
                 detail=f"Document number already exists: {document_number}",
             )
 
-        title = file_name.rsplit('.', 1)[0].strip() or "Untitled PDF document"
+        title = file_name.rsplit(".", 1)[0].strip() or "Untitled PDF document"
         document = Document(
             project_code=project_code,
             document_number=document_number,
@@ -174,7 +296,9 @@ def create_documents_from_pdf_upload(
         session.commit()
         created_documents.append(document)
 
-    return DocumentBatchCreateResponse(total_created=len(created_documents), items=created_documents)
+    return DocumentBatchCreateResponse(
+        total_created=len(created_documents), items=created_documents
+    )
 
 
 @router.post(
@@ -193,7 +317,9 @@ def pull_document_for_revision(
 
     pdf_path = _document_pdf_path(document_id)
     if not pdf_path.exists():
-        raise HTTPException(status_code=404, detail="No PDF file found for this document")
+        raise HTTPException(
+            status_code=404, detail="No PDF file found for this document"
+        )
 
     record_audit_event(
         session,
@@ -227,7 +353,9 @@ def download_document_file(
 
     pdf_path = _document_pdf_path(document_id)
     if not pdf_path.exists():
-        raise HTTPException(status_code=404, detail="No PDF file found for this document")
+        raise HTTPException(
+            status_code=404, detail="No PDF file found for this document"
+        )
 
     record_audit_event(
         session,
@@ -245,7 +373,9 @@ def download_document_file(
     )
 
 
-@router.get("/search", response_model=DocumentSearchResponse, summary="Search documents")
+@router.get(
+    "/search", response_model=DocumentSearchResponse, summary="Search documents"
+)
 def search_documents(
     session: Session = Depends(get_session),
     q: str | None = None,
@@ -328,7 +458,9 @@ def dashboard_extended(
     )
 
 
-@router.post("/{document_id}/branches", response_model=BranchResponse, summary="Create branch")
+@router.post(
+    "/{document_id}/branches", response_model=BranchResponse, summary="Create branch"
+)
 def create_branch(
     document_id: int,
     payload: BranchCreateRequest,
@@ -340,10 +472,14 @@ def create_branch(
         raise HTTPException(status_code=404, detail="Document not found")
 
     existing = session.exec(
-        select(Branch).where(Branch.document_id == document_id, Branch.name == payload.name)
+        select(Branch).where(
+            Branch.document_id == document_id, Branch.name == payload.name
+        )
     ).first()
     if existing:
-        raise HTTPException(status_code=409, detail="Branch already exists for this document")
+        raise HTTPException(
+            status_code=409, detail="Branch already exists for this document"
+        )
 
     branch = Branch(document_id=document_id, name=payload.name)
     session.add(branch)
@@ -352,7 +488,9 @@ def create_branch(
     return branch
 
 
-@router.post("/{document_id}/commit", response_model=RevisionResponse, summary="Commit revision")
+@router.post(
+    "/{document_id}/commit", response_model=RevisionResponse, summary="Commit revision"
+)
 def commit_document_revision(
     document_id: int,
     payload: CommitRequest,
@@ -378,7 +516,9 @@ def commit_document_revision(
         )
     ).first()
     if duplicate_revision:
-        raise HTTPException(status_code=409, detail="Revision already exists on this branch")
+        raise HTTPException(
+            status_code=409, detail="Revision already exists on this branch"
+        )
 
     revision = DocumentRevision(
         document_id=document_id,
@@ -404,7 +544,9 @@ def commit_document_revision(
     return revision
 
 
-@router.post("/branches/{branch_id}/push", response_model=PushResponse, summary="Push revisions")
+@router.post(
+    "/branches/{branch_id}/push", response_model=PushResponse, summary="Push revisions"
+)
 def push_branch(
     branch_id: int,
     session: Session = Depends(get_session),
@@ -416,7 +558,10 @@ def push_branch(
 
     pending_revisions = session.exec(
         select(DocumentRevision)
-        .where(DocumentRevision.branch_id == branch_id, DocumentRevision.is_pushed.is_(False))
+        .where(
+            DocumentRevision.branch_id == branch_id,
+            DocumentRevision.is_pushed.is_(False),
+        )
         .order_by(col(DocumentRevision.id))
     ).all()
 
@@ -447,7 +592,11 @@ def push_branch(
     )
 
 
-@router.post("/branches/{branch_id}/pull", response_model=PullResponse, summary="Pull latest pushed revisions")
+@router.post(
+    "/branches/{branch_id}/pull",
+    response_model=PullResponse,
+    summary="Pull latest pushed revisions",
+)
 def pull_branch(branch_id: int, session: Session = Depends(get_session)):
     branch = session.get(Branch, branch_id)
     if not branch:
@@ -494,11 +643,21 @@ def compare_document_revisions(
     to_revision = session.get(DocumentRevision, to_revision_id)
 
     if not from_revision or from_revision.document_id != document_id:
-        raise HTTPException(status_code=404, detail="From revision not found for document")
+        raise HTTPException(
+            status_code=404, detail="From revision not found for document"
+        )
     if not to_revision or to_revision.document_id != document_id:
-        raise HTTPException(status_code=404, detail="To revision not found for document")
+        raise HTTPException(
+            status_code=404, detail="To revision not found for document"
+        )
 
-    fields_to_compare = ["revision", "commit_message", "file_hash", "author_email", "is_pushed"]
+    fields_to_compare = [
+        "revision",
+        "commit_message",
+        "file_hash",
+        "author_email",
+        "is_pushed",
+    ]
     changed_fields: list[RevisionDiffField] = []
 
     for field in fields_to_compare:
@@ -536,9 +695,13 @@ def compare_revision_text(
     from_revision = session.get(DocumentRevision, from_revision_id)
     to_revision = session.get(DocumentRevision, to_revision_id)
     if not from_revision or from_revision.document_id != document_id:
-        raise HTTPException(status_code=404, detail="From revision not found for document")
+        raise HTTPException(
+            status_code=404, detail="From revision not found for document"
+        )
     if not to_revision or to_revision.document_id != document_id:
-        raise HTTPException(status_code=404, detail="To revision not found for document")
+        raise HTTPException(
+            status_code=404, detail="To revision not found for document"
+        )
 
     from_lines = (from_revision.content_text or "").splitlines()
     to_lines = (to_revision.content_text or "").splitlines()
@@ -622,10 +785,14 @@ def decide_approval(
 
     approval = session.get(Approval, approval_id)
     if not approval or approval.document_id != document_id:
-        raise HTTPException(status_code=404, detail="Approval request not found for document")
+        raise HTTPException(
+            status_code=404, detail="Approval request not found for document"
+        )
 
     if approval.decision != "pending":
-        raise HTTPException(status_code=409, detail="Approval decision already recorded")
+        raise HTTPException(
+            status_code=409, detail="Approval decision already recorded"
+        )
 
     approval.decision = payload.decision
     approval.comments = payload.comments
@@ -670,7 +837,9 @@ def create_transmittal(
         raise HTTPException(status_code=404, detail="Revision not found for document")
 
     exists = session.exec(
-        select(Transmittal).where(Transmittal.transmittal_number == payload.transmittal_number)
+        select(Transmittal).where(
+            Transmittal.transmittal_number == payload.transmittal_number
+        )
     ).first()
     if exists:
         raise HTTPException(status_code=409, detail="Transmittal number already exists")
@@ -753,7 +922,15 @@ def export_audit_events_csv(
     writer = csv.writer(output)
     writer.writerow(["id", "event_type", "actor_email", "details", "created_at"])
     for event in events:
-        writer.writerow([event.id, event.event_type, event.actor_email, event.details, event.created_at])
+        writer.writerow(
+            [
+                event.id,
+                event.event_type,
+                event.actor_email,
+                event.details,
+                event.created_at,
+            ]
+        )
 
     filename = f"audit_document_{document_id}.csv"
     return Response(
@@ -804,8 +981,6 @@ def export_audit_events_jsonl(
     )
 
 
-
-
 @router.get(
     "/admin/backup",
     response_model=BackupSnapshotResponse,
@@ -816,12 +991,25 @@ def create_backup_snapshot(
     _: CurrentUser = Depends(require_roles("user")),
 ):
     snapshot = {
-        "documents": [d.model_dump(mode="json") for d in session.exec(select(Document)).all()],
-        "branches": [b.model_dump(mode="json") for b in session.exec(select(Branch)).all()],
-        "revisions": [r.model_dump(mode="json") for r in session.exec(select(DocumentRevision)).all()],
-        "approvals": [a.model_dump(mode="json") for a in session.exec(select(Approval)).all()],
-        "transmittals": [t.model_dump(mode="json") for t in session.exec(select(Transmittal)).all()],
-        "audit_events": [e.model_dump(mode="json") for e in session.exec(select(AuditEvent)).all()],
+        "documents": [
+            d.model_dump(mode="json") for d in session.exec(select(Document)).all()
+        ],
+        "branches": [
+            b.model_dump(mode="json") for b in session.exec(select(Branch)).all()
+        ],
+        "revisions": [
+            r.model_dump(mode="json")
+            for r in session.exec(select(DocumentRevision)).all()
+        ],
+        "approvals": [
+            a.model_dump(mode="json") for a in session.exec(select(Approval)).all()
+        ],
+        "transmittals": [
+            t.model_dump(mode="json") for t in session.exec(select(Transmittal)).all()
+        ],
+        "audit_events": [
+            e.model_dump(mode="json") for e in session.exec(select(AuditEvent)).all()
+        ],
     }
     return BackupSnapshotResponse(snapshot=snapshot)
 
@@ -852,7 +1040,9 @@ def restore_backup_snapshot(
     for row in snapshot.get("revisions", []):
         session.add(DocumentRevision(**_deserialize_datetimes(row, ["created_at"])))
     for row in snapshot.get("approvals", []):
-        session.add(Approval(**_deserialize_datetimes(row, ["created_at", "decided_at"])))
+        session.add(
+            Approval(**_deserialize_datetimes(row, ["created_at", "decided_at"]))
+        )
     for row in snapshot.get("transmittals", []):
         session.add(Transmittal(**_deserialize_datetimes(row, ["created_at"])))
     for row in snapshot.get("audit_events", []):
@@ -861,7 +1051,39 @@ def restore_backup_snapshot(
     session.commit()
     return {"status": "restored"}
 
-@router.get("/{document_id}/history", response_model=list[RevisionResponse], summary="Revision history")
+
+@router.post(
+    "/admin/dev/seed-demo",
+    response_model=DemoSeedResponse,
+    summary="Seed development demo data",
+)
+def seed_demo_data(
+    session: Session = Depends(get_session),
+    _: CurrentUser = Depends(require_roles("user")),
+):
+    _ensure_demo_tools_enabled()
+    return _seed_demo_data(session)
+
+
+@router.post(
+    "/admin/dev/reset-demo",
+    response_model=DemoSeedResponse,
+    summary="Reset and reseed development demo data",
+)
+def reset_demo_data(
+    session: Session = Depends(get_session),
+    _: CurrentUser = Depends(require_roles("user")),
+):
+    _ensure_demo_tools_enabled()
+    _clear_documents_and_storage(session)
+    return _seed_demo_data(session)
+
+
+@router.get(
+    "/{document_id}/history",
+    response_model=list[RevisionResponse],
+    summary="Revision history",
+)
 def get_document_history(document_id: int, session: Session = Depends(get_session)):
     document = session.get(Document, document_id)
     if not document:
