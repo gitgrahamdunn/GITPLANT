@@ -89,9 +89,11 @@ def test_commit_push_pull_and_history_flow():
 
 def test_compare_revisions_returns_changed_fields():
     reset_db()
+    engineer_headers = auth_headers("engineer@edms.local", "engineer123")
 
     doc = client.post(
         "/documents",
+        headers=engineer_headers,
         json={
             "project_code": "PRJ-2",
             "document_number": "MECH-2201",
@@ -101,11 +103,14 @@ def test_compare_revisions_returns_changed_fields():
     )
     document_id = doc.json()["id"]
 
-    branch = client.post(f"/documents/{document_id}/branches", json={"name": "main"})
+    branch = client.post(
+        f"/documents/{document_id}/branches", headers=engineer_headers, json={"name": "main"}
+    )
     assert branch.status_code == 200
 
     rev_a = client.post(
         f"/documents/{document_id}/commit?branch=main",
+        headers=engineer_headers,
         json={
             "revision": "A",
             "commit_message": "Initial issue",
@@ -117,6 +122,7 @@ def test_compare_revisions_returns_changed_fields():
 
     rev_b = client.post(
         f"/documents/{document_id}/commit?branch=main",
+        headers=engineer_headers,
         json={
             "revision": "B",
             "commit_message": "Updated nozzle orientation",
@@ -225,6 +231,7 @@ def test_document_search_transmittal_audit_and_dashboard_flow():
 
     doc = client.post(
         "/documents",
+        headers=controller_headers,
         json={
             "project_code": "PRJ-6",
             "document_number": "MECH-6002",
@@ -239,11 +246,14 @@ def test_document_search_transmittal_audit_and_dashboard_flow():
     assert search.status_code == 200
     assert search.json()["total"] == 1
 
-    branch = client.post(f"/documents/{doc_id}/branches", json={"name": "main"})
+    branch = client.post(
+        f"/documents/{doc_id}/branches", headers=controller_headers, json={"name": "main"}
+    )
     assert branch.status_code == 200
 
     rev = client.post(
         f"/documents/{doc_id}/commit?branch=main",
+        headers=controller_headers,
         json={
             "revision": "A",
             "commit_message": "Issue for vendor",
@@ -255,6 +265,7 @@ def test_document_search_transmittal_audit_and_dashboard_flow():
 
     transmittal = client.post(
         f"/documents/{doc_id}/transmittals",
+        headers=controller_headers,
         json={
             "revision_id": rev.json()["id"],
             "transmittal_number": "TRM-0001",
@@ -293,7 +304,7 @@ def test_document_search_transmittal_audit_and_dashboard_flow():
     assert audit.status_code == 200
     assert len(audit.json()) >= 3
 
-    summary = client.get("/documents/reports/dashboard-summary")
+    summary = client.get("/documents/reports/dashboard-summary", headers=controller_headers)
     assert summary.status_code == 200
     assert summary.json()["total_documents"] == 1
     assert summary.json()["total_transmittals"] == 1
