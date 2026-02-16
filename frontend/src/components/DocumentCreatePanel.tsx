@@ -104,6 +104,8 @@ export default function DocumentCreatePanel({ token, onCreated }: DocumentCreate
     } finally {
       setIsSubmitting(false);
     }
+
+    setIsSubmitting(false);
   }
 
   return (
