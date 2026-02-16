@@ -6,8 +6,8 @@ interface LoginPanelProps {
 }
 
 export default function LoginPanel({ onToken }: LoginPanelProps): JSX.Element {
-  const [email, setEmail] = useState('engineer@edms.local');
-  const [password, setPassword] = useState('engineer123');
+  const [email, setEmail] = useState('controller@edms.local');
+  const [password, setPassword] = useState('controller123');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 

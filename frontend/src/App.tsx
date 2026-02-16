@@ -5,8 +5,14 @@ import DocumentSearchPanel from './components/DocumentSearchPanel';
 import LoginPanel from './components/LoginPanel';
 import type { DashboardSummary, MeResponse } from './types';
 
+const STORAGE_KEY = 'gitplant.token';
+
+function canViewDashboard(role: MeResponse['role']): boolean {
+  return role === 'document_controller' || role === 'approver';
+}
+
 export default function App(): JSX.Element {
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(STORAGE_KEY));
   const [me, setMe] = useState<MeResponse | null>(null);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -17,15 +23,24 @@ export default function App(): JSX.Element {
     if (!token) {
       setMe(null);
       setSummary(null);
+      localStorage.removeItem(STORAGE_KEY);
       return;
     }
+
+    localStorage.setItem(STORAGE_KEY, token);
 
     async function loadData(): Promise<void> {
       setError(null);
       try {
-        const [profile, dashboard] = await Promise.all([fetchMe(token), fetchDashboard(token)]);
+        const profile = await fetchMe(token);
         setMe(profile);
-        setSummary(dashboard);
+
+        if (canViewDashboard(profile.role)) {
+          const dashboard = await fetchDashboard(token);
+          setSummary(dashboard);
+        } else {
+          setSummary(null);
+        }
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Failed to load app data');
         setToken(null);
@@ -34,6 +49,14 @@ export default function App(): JSX.Element {
 
     void loadData();
   }, [token]);
+
+  function handleLogout(): void {
+    setToken(null);
+    setMe(null);
+    setSummary(null);
+    setError(null);
+    localStorage.removeItem(STORAGE_KEY);
+  }
 
   return (
     <main className="container">
@@ -46,18 +69,27 @@ export default function App(): JSX.Element {
 
       {error ? <p className="error">{error}</p> : null}
 
-      {isAuthed && me && summary ? (
+      {isAuthed && me ? (
         <>
           <section className="card">
             <h2>Session</h2>
             <p>
-             Signed in as <strong>{me.email}</strong> ({me.role})
+              Signed in as <strong>{me.email}</strong> ({me.role})
             </p>
-            <button type="button" onClick={() => setToken(null)}>
+            <button type="button" onClick={handleLogout}>
               Sign out
             </button>
           </section>
-          <DashboardPanel summary={summary} />
+
+          {summary ? (
+            <DashboardPanel summary={summary} />
+          ) : (
+            <section className="card">
+              <h2>Dashboard summary</h2>
+              <p className="hint">Dashboard metrics are available for approver and document controller roles.</p>
+            </section>
+          )}
+
           <DocumentSearchPanel token={token!} />
         </>
       ) : null}
