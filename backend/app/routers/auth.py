@@ -7,9 +7,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 DEMO_USERS = {
-    "controller@edms.local": {"password": "controller123", "role": "document_controller"},
-    "engineer@edms.local": {"password": "engineer123", "role": "engineer"},
-    "approver@edms.local": {"password": "approver123", "role": "approver"},
+    "user@edms.local": {"password": "user123", "role": "user"},
 }
 
 

@@ -6,8 +6,8 @@ interface LoginPanelProps {
 }
 
 export default function LoginPanel({ onToken }: LoginPanelProps): JSX.Element {
-  const [email, setEmail] = useState('controller@edms.local');
-  const [password, setPassword] = useState('controller123');
+  const [email, setEmail] = useState('user@edms.local');
+  const [password, setPassword] = useState('user123');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -29,12 +29,9 @@ export default function LoginPanel({ onToken }: LoginPanelProps): JSX.Element {
   return (
     <section className="card">
       <h2>Sign in</h2>
-      <p className="hint">Demo accounts:</p>
-      <ul className="hint">
-        <li>controller@edms.local / controller123</li>
-        <li>engineer@edms.local / engineer123</li>
-        <li>approver@edms.local / approver123</li>
-      </ul>
+      <p className="hint">Demo account: user@edms.local / user123</p>
+
+
 
       <form onSubmit={handleSubmit} className="stack">
         <label>

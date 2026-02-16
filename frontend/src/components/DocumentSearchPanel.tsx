@@ -4,9 +4,10 @@ import type { SearchDocument } from '../types';
 
 interface DocumentSearchPanelProps {
   token: string;
+  refreshKey?: number;
 }
 
-export default function DocumentSearchPanel({ token }: DocumentSearchPanelProps): JSX.Element {
+export default function DocumentSearchPanel({ token, refreshKey = 0 }: DocumentSearchPanelProps): JSX.Element {
   const [query, setQuery] = useState('');
   const [documents, setDocuments] = useState<SearchDocument[]>([]);
   const [total, setTotal] = useState(0);
@@ -29,8 +30,8 @@ export default function DocumentSearchPanel({ token }: DocumentSearchPanelProps)
   }
 
   useEffect(() => {
-    void loadDocuments('');
-  }, [token]);
+    void loadDocuments(query);
+  }, [token, refreshKey]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
