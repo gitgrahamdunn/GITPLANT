@@ -27,6 +27,7 @@ export interface SearchDocument {
   discipline: string;
   status: string;
   current_revision: string;
+  file_path?: string | null;
   active_project_count?: number;
 }
 

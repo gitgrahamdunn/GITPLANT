@@ -1,0 +1,14 @@
+{
+  "name": "gitplant",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "python run_dev.py",
+    "dev:backend": "cd backend && APP_ENV=dev ENABLE_DEMO_ENDPOINTS=true uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "npm run build && cd backend && APP_ENV=prod ENABLE_DEMO_ENDPOINTS=false uvicorn app.main:app --host 0.0.0.0 --port 8000",
+    "test": "npm run test:backend && python scripts/e2e_happy_path.py",
+    "test:backend": "cd backend && pytest -q"
+  }
+}

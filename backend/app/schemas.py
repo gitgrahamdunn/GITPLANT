@@ -39,6 +39,7 @@ class DocumentResponse(ORMResponseModel):
     discipline: str
     status: str
     current_revision: str
+    file_path: str | None = None
     active_project_count: int = 0
 
 
@@ -212,6 +213,8 @@ class DemoSeedResponse(ORMResponseModel):
 
 
 class ProjectCreateRequest(BaseModel):
+    model_config = ConfigDict(json_schema_extra={"example": {"project_number": "PRJ-1001", "name": "Pump refresh", "description": "Update pump docs"}})
+
     project_number: str
     name: str | None = None
     description: str | None = None
@@ -264,6 +267,8 @@ class ProjectDetailResponse(ORMResponseModel):
 
 
 class ProjectPullRequest(BaseModel):
+    model_config = ConfigDict(json_schema_extra={"example": {"document_ids": [1, 2]}})
+
     document_ids: list[int] | None = None
     document_id: int | None = None
 

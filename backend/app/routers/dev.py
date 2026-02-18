@@ -18,8 +18,14 @@ class UiAuditRequest(BaseModel):
 
 
 def _ensure_dev_enabled() -> None:
-    if not settings.enable_demo_tools:
-        raise HTTPException(status_code=403, detail="Dev endpoints disabled")
+    if not settings.demo_endpoints_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Demo endpoints are disabled. Enable them by setting ENABLE_DEMO_ENDPOINTS=true "
+                "(typically only for local/dev environments)."
+            ),
+        )
 
 
 @router.post("/seed", response_model=DemoSeedResponse)
@@ -53,8 +59,10 @@ def dev_status(
     session: Session = Depends(get_session),
     _: CurrentUser = Depends(require_roles("user")),
 ):
-    _ensure_dev_enabled()
     return {
+        "enabled": settings.demo_endpoints_enabled,
+        "reason": settings.demo_endpoints_reason,
+        "guidance": "Set ENABLE_DEMO_ENDPOINTS=true for local use; keep false in production.",
         "documents": session.exec(select(func.count()).select_from(Document)).one(),
         "projects": session.exec(select(func.count()).select_from(Project)).one(),
         "working_revisions": session.exec(

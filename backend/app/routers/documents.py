@@ -75,10 +75,10 @@ def record_audit_event(
 
 
 def _ensure_demo_tools_enabled() -> None:
-    if not settings.enable_demo_tools:
+    if not settings.demo_endpoints_enabled:
         raise HTTPException(
             status_code=403,
-            detail="Demo tooling is disabled. Set ENABLE_DEMO_TOOLS=true to use this endpoint.",
+            detail="Demo tooling is disabled. Set ENABLE_DEMO_ENDPOINTS=true to use this endpoint.",
         )
 
 
@@ -224,6 +224,7 @@ def _to_document_response(
         discipline=document.discipline,
         status=document.status,
         current_revision=document.current_revision,
+        file_path=document.file_path,
         active_project_count=active_project_count,
     )
 
@@ -295,8 +296,10 @@ def _next_revision(current_revision: str) -> str:
     if len(cleaned) == 2 and cleaned[0] == "A" and "A" <= cleaned[1] <= "Y":
         return f"A{chr(ord(cleaned[1]) + 1)}"
     return f"{cleaned}-NEXT"
-def _document_pdf_path(document_id: int) -> Path:
-    return DOCUMENT_STORAGE_DIR / f"{document_id}.pdf"
+def _document_pdf_path(document: Document) -> Path:
+    if document.file_path:
+        return Path(document.file_path)
+    return DOCUMENT_STORAGE_DIR / f"{document.id}.pdf"
 
 
 def _to_document_number(file_name: str, index: int) -> str:
@@ -349,9 +352,11 @@ def create_documents_from_pdf_upload(
         session.refresh(document)
 
         file.file.seek(0)
-        destination = _document_pdf_path(document.id)
+        destination = DOCUMENT_STORAGE_DIR / f"{document.id}.pdf"
         with destination.open("wb") as output_stream:
             output_stream.write(file.file.read())
+        document.file_path = str(destination)
+        session.add(document)
 
         record_audit_event(
             session,
@@ -390,9 +395,11 @@ def upload_plant_revision(
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
     next_revision = _next_revision(document.current_revision)
-    destination = _document_pdf_path(document_id)
+    destination = DOCUMENT_STORAGE_DIR / f"{document_id}.pdf"
     file.file.seek(0)
     destination.write_bytes(file.file.read())
+
+    document.file_path = str(destination)
 
     plant_branch = _get_or_create_plant_branch(session, document_id)
     plant_revision = DocumentRevision(
@@ -434,7 +441,7 @@ def pull_document_for_revision(
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    pdf_path = _document_pdf_path(document_id)
+    pdf_path = _document_pdf_path(document)
     if not pdf_path.exists():
         raise HTTPException(
             status_code=404, detail="No PDF file found for this document"
@@ -470,7 +477,7 @@ def download_document_file(
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    pdf_path = _document_pdf_path(document_id)
+    pdf_path = _document_pdf_path(document)
     if not pdf_path.exists():
         raise HTTPException(
             status_code=404, detail="No PDF file found for this document"
