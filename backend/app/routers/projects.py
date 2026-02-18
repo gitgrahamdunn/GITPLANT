@@ -128,7 +128,10 @@ def list_projects(
 ):
     query = select(Project)
     if status:
-        query = query.where(Project.status == status.upper())
+        normalized = status.upper()
+        if normalized == "OPEN":
+            normalized = "ACTIVE"
+        query = query.where(Project.status == normalized)
 
     projects = session.exec(query.order_by(col(Project.created_at).desc())).all()
     responses: list[ProjectSummaryResponse] = []
@@ -170,7 +173,17 @@ def get_project_detail(
             continue
         working_docs.append(_to_working_response(row, document))
 
-    return ProjectDetailResponse(**project.model_dump(), working_docs=working_docs)
+    project_events = session.exec(
+        select(AuditEvent)
+        .where(AuditEvent.details.contains(project.project_number))
+        .order_by(col(AuditEvent.created_at).desc())
+    ).all()
+
+    return ProjectDetailResponse(
+        **project.model_dump(),
+        working_docs=working_docs,
+        events=project_events,
+    )
 
 
 @router.post("/{project_id}/pull", response_model=ProjectPullResponse)
@@ -449,6 +462,11 @@ def merge_project_to_plant(
                 new_revision=next_revision,
             )
         )
+
+    if merged_items:
+        project.status = "MERGED"
+        session.add(project)
+        session.commit()
 
     return ProjectMergeResponse(
         project_number=project.project_number,
