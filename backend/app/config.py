@@ -9,7 +9,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_ROOT.parent
 
 
-def _default_data_dir() -> Path:
+def get_data_dir() -> Path:
     configured_data_dir = os.getenv("DATA_DIR")
     if configured_data_dir:
         candidate = Path(configured_data_dir)
@@ -26,7 +26,8 @@ def _default_data_dir() -> Path:
     return Path("/tmp/gitplant-data")
 
 
-def _ensure_writable_data_dir(path: Path) -> Path:
+def ensure_data_dir() -> Path:
+    path = get_data_dir()
     try:
         path.mkdir(parents=True, exist_ok=True)
         return path
@@ -37,7 +38,7 @@ def _ensure_writable_data_dir(path: Path) -> Path:
 
 
 # Vercel serverless functions run on a read-only filesystem except for /tmp.
-DEFAULT_DATA_DIR = _ensure_writable_data_dir(_default_data_dir())
+DEFAULT_DATA_DIR = get_data_dir()
 DEFAULT_DB_PATH = DEFAULT_DATA_DIR / "edms.db"
 DEFAULT_DATABASE_URL = f"sqlite:///{quote(str(DEFAULT_DB_PATH), safe='/')}"
 DEFAULT_STORAGE_DIR = DEFAULT_DATA_DIR / "documents"
@@ -103,17 +104,32 @@ def sanitize_database_url(database_url: str) -> str:
     return parsed._replace(netloc=netloc).geturl()
 
 
-def _ensure_path(path: str) -> Path:
+def _resolve_path(path: str) -> Path:
     configured = Path(path)
     if not configured.is_absolute():
         configured = (BACKEND_ROOT / configured).resolve()
+    return configured
+
+
+def _ensure_path(path: str) -> Path:
+    configured = _resolve_path(path)
     configured.mkdir(parents=True, exist_ok=True)
     return configured
 
 
-def get_document_storage_path() -> Path:
-    return _ensure_path(settings.document_storage_dir)
+def get_document_storage_path(*, ensure_exists: bool = True) -> Path:
+    if settings.document_storage_dir == str(DEFAULT_STORAGE_DIR):
+        base_path = ensure_data_dir() / "documents" if ensure_exists else get_data_dir() / "documents"
+        if ensure_exists:
+            base_path.mkdir(parents=True, exist_ok=True)
+        return base_path
+    return _ensure_path(settings.document_storage_dir) if ensure_exists else _resolve_path(settings.document_storage_dir)
 
 
-def get_plant_storage_path() -> Path:
-    return _ensure_path(settings.plant_storage_dir)
+def get_plant_storage_path(*, ensure_exists: bool = True) -> Path:
+    if settings.plant_storage_dir == str(DEFAULT_PLANT_STORAGE_DIR):
+        base_path = ensure_data_dir() / "plant" if ensure_exists else get_data_dir() / "plant"
+        if ensure_exists:
+            base_path.mkdir(parents=True, exist_ok=True)
+        return base_path
+    return _ensure_path(settings.plant_storage_dir) if ensure_exists else _resolve_path(settings.plant_storage_dir)
