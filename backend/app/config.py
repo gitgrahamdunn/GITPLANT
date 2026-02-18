@@ -7,34 +7,42 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_ROOT.parent
+TMP_ROOT = Path("/tmp")
+
+
+def _resolve_writable_dir(*, env_var: str, default_dir_name: str) -> Path:
+    configured_dir = os.getenv(env_var)
+    if configured_dir:
+        configured_path = Path(configured_dir)
+        if not configured_path.is_absolute():
+            return TMP_ROOT / configured_path
+        return configured_path
+    return TMP_ROOT / default_dir_name
 
 
 def get_data_dir() -> Path:
-    configured_data_dir = os.getenv("DATA_DIR")
-    if configured_data_dir:
-        candidate = Path(configured_data_dir)
-        if not candidate.is_absolute():
-            candidate = Path("/tmp") / candidate
-    else:
-        candidate = Path("/tmp/gitplant-data")
+    candidate = _resolve_writable_dir(env_var="DATA_DIR", default_dir_name="gitplant-data")
 
     try:
         candidate.relative_to(REPO_ROOT)
     except ValueError:
         return candidate
 
-    return Path("/tmp/gitplant-data")
+    return TMP_ROOT / "gitplant-data"
+
+
+def ensure_dir(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def ensure_data_dir() -> Path:
     path = get_data_dir()
     try:
-        path.mkdir(parents=True, exist_ok=True)
-        return path
+        return ensure_dir(path)
     except OSError:
-        fallback = Path("/tmp/gitplant-data")
-        fallback.mkdir(parents=True, exist_ok=True)
-        return fallback
+        fallback = TMP_ROOT / "gitplant-data"
+        return ensure_dir(fallback)
 
 
 # Vercel serverless functions run on a read-only filesystem except for /tmp.
@@ -107,29 +115,40 @@ def sanitize_database_url(database_url: str) -> str:
 def _resolve_path(path: str) -> Path:
     configured = Path(path)
     if not configured.is_absolute():
-        configured = (BACKEND_ROOT / configured).resolve()
+        configured = (TMP_ROOT / configured).resolve()
     return configured
 
 
 def _ensure_path(path: str) -> Path:
     configured = _resolve_path(path)
-    configured.mkdir(parents=True, exist_ok=True)
-    return configured
+    return ensure_dir(configured)
+
+
+def get_storage_dir(*, ensure_exists: bool = True) -> Path:
+    path = _resolve_writable_dir(env_var="STORAGE_DIR", default_dir_name="gitplant-storage")
+    return ensure_dir(path) if ensure_exists else path
 
 
 def get_document_storage_path(*, ensure_exists: bool = True) -> Path:
     if settings.document_storage_dir == str(DEFAULT_STORAGE_DIR):
         base_path = ensure_data_dir() / "documents" if ensure_exists else get_data_dir() / "documents"
-        if ensure_exists:
-            base_path.mkdir(parents=True, exist_ok=True)
-        return base_path
+        return ensure_dir(base_path) if ensure_exists else base_path
     return _ensure_path(settings.document_storage_dir) if ensure_exists else _resolve_path(settings.document_storage_dir)
 
 
 def get_plant_storage_path(*, ensure_exists: bool = True) -> Path:
     if settings.plant_storage_dir == str(DEFAULT_PLANT_STORAGE_DIR):
         base_path = ensure_data_dir() / "plant" if ensure_exists else get_data_dir() / "plant"
-        if ensure_exists:
-            base_path.mkdir(parents=True, exist_ok=True)
-        return base_path
+        return ensure_dir(base_path) if ensure_exists else base_path
     return _ensure_path(settings.plant_storage_dir) if ensure_exists else _resolve_path(settings.plant_storage_dir)
+
+
+def get_working_storage_path(*, ensure_exists: bool = True) -> Path:
+    configured = os.getenv("WORKING_STORAGE_DIR")
+    if configured:
+        path = _ensure_path(configured) if ensure_exists else _resolve_path(configured)
+        return path
+
+    base = get_storage_dir(ensure_exists=ensure_exists)
+    path = base / "projects"
+    return ensure_dir(path) if ensure_exists else path

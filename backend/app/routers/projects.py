@@ -2,7 +2,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlmodel import Session, col, select
 
-from app.config import BACKEND_ROOT
+from app.config import get_working_storage_path
 from app.db import get_session
 from app.models import (
     AuditEvent,
@@ -29,11 +29,6 @@ from app.security import CurrentUser, require_roles
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 ACTIVE_WORKING_STATUSES = {"WORKING", "READY"}
-WORKING_STORAGE_DIR = (BACKEND_ROOT / "storage" / "projects").resolve()
-
-
-def ensure_working_storage_dir() -> None:
-    WORKING_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _to_working_response(
@@ -293,8 +288,7 @@ def upload_working_revision_file(
     if not filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
-    ensure_working_storage_dir()
-    destination = WORKING_STORAGE_DIR / f"{project.id}-{working.id}.pdf"
+    destination = get_working_storage_path() / f"{project.id}-{working.id}.pdf"
     file.file.seek(0)
     destination.write_bytes(file.file.read())
 
