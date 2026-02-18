@@ -17,9 +17,19 @@ import type {
   WorkingRevisionStatusResponse,
 } from "./types";
 
-const API_BASE_URL =
-  (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
-    ?.VITE_API_BASE_URL ?? "http://localhost:8000";
+const frontendEnv = (import.meta as ImportMeta & {
+  env?: Record<string, string | undefined>;
+}).env;
+
+const configuredApiUrl = frontendEnv?.VITE_API_URL?.trim();
+const API_BASE_URL = configuredApiUrl || window.location.origin;
+
+if (!configuredApiUrl) {
+  console.error(
+    "[api] Missing required VITE_API_URL. Falling back to same-origin requests. " +
+      "Set VITE_API_URL to your deployed backend URL (for example, https://gitplant-backend.vercel.app).",
+  );
+}
 
 function getAuthHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` };
