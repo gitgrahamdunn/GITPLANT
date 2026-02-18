@@ -26,13 +26,22 @@ def _default_data_dir() -> Path:
     return Path("/tmp/gitplant-data")
 
 
+def _ensure_writable_data_dir(path: Path) -> Path:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    except OSError:
+        fallback = Path("/tmp/gitplant-data")
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+
 # Vercel serverless functions run on a read-only filesystem except for /tmp.
-DEFAULT_DATA_DIR = _default_data_dir()
-DEFAULT_DATA_DIR.mkdir(parents=True, exist_ok=True)
+DEFAULT_DATA_DIR = _ensure_writable_data_dir(_default_data_dir())
 DEFAULT_DB_PATH = DEFAULT_DATA_DIR / "edms.db"
 DEFAULT_DATABASE_URL = f"sqlite:///{quote(str(DEFAULT_DB_PATH), safe='/')}"
-DEFAULT_STORAGE_DIR = BACKEND_ROOT / "storage" / "documents"
-DEFAULT_PLANT_STORAGE_DIR = BACKEND_ROOT / "storage" / "plant"
+DEFAULT_STORAGE_DIR = DEFAULT_DATA_DIR / "documents"
+DEFAULT_PLANT_STORAGE_DIR = DEFAULT_DATA_DIR / "plant"
 
 
 class Settings(BaseSettings):
