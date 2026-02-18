@@ -21,7 +21,7 @@ const frontendEnv = (import.meta as ImportMeta & {
   env?: Record<string, string | undefined>;
 }).env;
 
-const configuredApiUrl = frontendEnv?.VITE_API_URL?.trim();
+const configuredApiUrl = frontendEnv?.VITE_API_URL?.trim()?.replace(/\/$/, "");
 const API_BASE_URL = configuredApiUrl || window.location.origin;
 
 if (!configuredApiUrl) {
@@ -92,7 +92,18 @@ async function requestForm<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(buildApiUrl(path), options);
+  let response: Response;
+
+  try {
+    response = await fetch(buildApiUrl(path), options);
+  } catch (error) {
+    console.error("[api] Request failed", {
+      url: buildApiUrl(path),
+      method: options.method ?? "GET",
+      error,
+    });
+    throw new Error("Network request failed. Check your connection and API URL.");
+  }
 
   if (!response.ok) {
     throw new Error(await readErrorMessage(response));
@@ -102,13 +113,24 @@ async function requestForm<T>(
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(buildApiUrl(path), {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers ?? {}),
-    },
-    ...options,
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(buildApiUrl(path), {
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers ?? {}),
+      },
+      ...options,
+    });
+  } catch (error) {
+    console.error("[api] Request failed", {
+      url: buildApiUrl(path),
+      method: options.method ?? "GET",
+      error,
+    });
+    throw new Error("Network request failed. Check your connection and API URL.");
+  }
 
   if (!response.ok) {
     throw new Error(await readErrorMessage(response));

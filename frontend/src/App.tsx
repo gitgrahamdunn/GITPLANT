@@ -93,10 +93,12 @@ export default function App(): JSX.Element {
   async function handleLogin(email: string, password: string): Promise<void> {
     try {
       logUiEvent(token, "login_click", { email });
+      setError(null);
       setLoading(true);
       const result = await login(email, password);
       setToken(result.access_token);
     } catch (e) {
+      console.error("[auth] Login failed", e);
       setError(e instanceof Error ? e.message : "Login failed");
     } finally {
       setLoading(false);
@@ -143,7 +145,7 @@ export default function App(): JSX.Element {
       {!authed ? (
         <section className="login-panel">
           <h2>Sign in</h2>
-          <LoginForm onSubmit={handleLogin} loading={loading} />
+          <LoginForm onSubmit={handleLogin} loading={loading} error={error} />
         </section>
       ) : (
         <>
@@ -251,14 +253,17 @@ export default function App(): JSX.Element {
   );
 }
 
-function LoginForm({ onSubmit, loading }: { onSubmit: (email: string, password: string) => Promise<void>; loading: boolean }): JSX.Element {
+function LoginForm({ onSubmit, loading, error }: { onSubmit: (email: string, password: string) => Promise<void>; loading: boolean; error: string | null }): JSX.Element {
   const [email, setEmail] = useState("user@edms.local");
   const [password, setPassword] = useState("user123");
   return (
-    <form onSubmit={(e) => { e.preventDefault(); void onSubmit(email, password); }} className="toolbar">
-      <input value={email} onChange={(e) => setEmail(e.target.value)} />
-      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-      <button disabled={loading} type="submit">Sign in</button>
-    </form>
+    <>
+      <form onSubmit={(e) => { e.preventDefault(); void onSubmit(email, password); }} className="toolbar">
+        <input value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <button disabled={loading} type="submit">{loading ? "Signing in..." : "Sign in"}</button>
+      </form>
+      {error ? <div className="banner-error">{error}</div> : null}
+    </>
   );
 }
