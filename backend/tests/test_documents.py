@@ -374,11 +374,11 @@ def test_pull_for_revision_and_download_pdf():
     assert download.content.startswith(b"%PDF")
 
 
-def test_demo_seed_endpoints_require_flag():
+def test_demo_seed_endpoints_enabled_in_dev():
     headers = auth_headers("user@edms.local", "user123")
 
     seed_response = client.post("/documents/admin/dev/seed-demo", headers=headers)
     reset_response = client.post("/documents/admin/dev/reset-demo", headers=headers)
 
-    assert seed_response.status_code == 403
-    assert reset_response.status_code == 403
+    assert seed_response.status_code == 200
+    assert reset_response.status_code == 200

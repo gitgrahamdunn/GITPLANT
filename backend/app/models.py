@@ -22,6 +22,7 @@ class Document(SQLModel, table=True):
     discipline: str = Field(index=True)
     status: str = Field(default="WIP", index=True)
     current_revision: str = Field(default="A")
+    file_path: str | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

@@ -150,3 +150,12 @@ def test_project_working_set_pull_ready_merge_flow():
     assert "project_pull" in event_types
     assert "project_ready" in event_types
     assert "project_merged" in event_types
+
+
+def test_project_create_validation_error_is_clear():
+    reset_db()
+    headers = auth_headers("user@edms.local", "user123")
+    response = client.post("/projects", headers=headers, json={"name": "Missing number"})
+    assert response.status_code == 422
+    body = response.json()
+    assert any("project_number" in str(item.get("loc", [])) for item in body.get("detail", []))

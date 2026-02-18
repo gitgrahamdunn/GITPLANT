@@ -4,63 +4,53 @@ GitPlant is a document-control MVP for engineering teams.
 
 ## Workflow mapping
 
-- **Plant** = `main` branch (source of truth documents)
-- **Project** = pull request against Plant
-- Project detail behaves like a PR page with Conversation / Files changed / Checks and merge action.
+- **Code (Plant)** = `main` branch (source of truth documents)
+- **Pull Request (Project)** = project workflow against Plant
 
-## Quick start
+## Quickstart
 
-### 1) Backend
-
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-ENABLE_DEMO_TOOLS=true uvicorn app.main:app --reload
-```
-
-Backend: http://127.0.0.1:8000/docs
-
-### 2) Frontend
+From repository root, run one command:
 
 ```bash
-cd frontend
-npm install
 npm run dev
 ```
 
-Frontend: http://127.0.0.1:5173
+This starts both:
+- Backend API on `http://127.0.0.1:8000`
+- Frontend UI on `http://127.0.0.1:5173`
+
+## Single-server mode (API + UI on one port)
+
+```bash
+npm run start
+```
+
+This builds frontend and serves it via FastAPI at `http://127.0.0.1:8000`.
 
 ## Demo account
 
 - `user@edms.local / user123`
 
-## Dev demo-data controls
+## Demo controls
 
-When `ENABLE_DEMO_TOOLS=true`, the app exposes:
+Dev endpoints are enabled automatically when `APP_ENV=dev` (or explicitly with `ENABLE_DEMO_ENDPOINTS=true`).
 
-- `POST /dev/seed` -> wipe and reseed synthetic SQLite demo data (documents + projects + working revisions + audit events)
-- `POST /dev/reset` -> wipe all demo data
-- `GET /dev/status` -> counts of seeded entities
-- `POST /dev/audit/ui` -> dev-only UI interaction audit sink
+- `POST /dev/seed` → wipe + reseed docs/projects/audit events + placeholder PDFs
+- `POST /dev/reset` → wipe demo data + storage
+- `GET /dev/status` → enabled flag + reason + entity counts
 
-You can also seed from script:
+## Testing (single command)
 
 ```bash
-cd backend
-python scripts/seed_demo.py
+npm test
 ```
+
+This runs:
+- backend pytest suite
+- scripted frontend/backend happy-path flow
 
 ## Persistence
 
 - SQLite DB path defaults to `backend/.data/edms.db`
-- Document storage defaults to `backend/storage/documents`
-- Runtime path diagnostics: `GET /health/info`
-
-## Validation commands
-
-```bash
-cd backend && pytest -q
-cd frontend && npm run build
-```
+- Plant storage defaults to `backend/storage/plant`
+- Document upload storage defaults to `backend/storage/documents`

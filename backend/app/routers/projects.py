@@ -79,19 +79,20 @@ def _next_revision(current_revision: str) -> str:
     return f"{cleaned}-NEXT"
 
 
-def _get_project_by_number(session: Session, project_number: str) -> Project:
-    project = session.exec(
-        select(Project).where(Project.project_number == project_number)
-    ).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return project
+def _resolve_project(session: Session, project_key: str) -> Project:
+    project = session.exec(select(Project).where(Project.project_number == project_key)).first()
+    if project:
+        return project
+    project = session.get(Project, project_key)
+    if project:
+        return project
+    raise HTTPException(status_code=404, detail=f"Project not found for key: {project_key}")
 
 
 def _get_project_by_id(session: Session, project_id: str) -> Project:
     project = session.get(Project, project_id)
     if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail=f"Project not found for id: {project_id}")
     return project
 
 
@@ -158,7 +159,7 @@ def get_project_detail(
     session: Session = Depends(get_session),
     _: CurrentUser = Depends(require_roles("user")),
 ):
-    project = _get_project_by_number(session, project_number)
+    project = _resolve_project(session, project_number)
 
     working_rows = session.exec(
         select(ProjectWorkingRevision)
@@ -204,7 +205,7 @@ def pull_documents_for_project(
         document_ids.update(payload.document_ids)
 
     if not document_ids:
-        raise HTTPException(status_code=400, detail="No document ids provided")
+        raise HTTPException(status_code=400, detail="No document_ids provided. Send document_ids: [int] or document_id: int")
 
     created: list[ProjectWorkingRevisionResponse] = []
     skipped: list[int] = []
@@ -325,7 +326,7 @@ def mark_working_ready(
     session: Session = Depends(get_session),
     current_user: CurrentUser = Depends(require_roles("user")),
 ):
-    project = _get_project_by_number(session, project_number)
+    project = _resolve_project(session, project_number)
     working = session.get(ProjectWorkingRevision, working_revision_id)
     if not working or working.project_id != project.id:
         raise HTTPException(
@@ -364,7 +365,7 @@ def abandon_working_revision(
     session: Session = Depends(get_session),
     current_user: CurrentUser = Depends(require_roles("user")),
 ):
-    project = _get_project_by_number(session, project_number)
+    project = _resolve_project(session, project_number)
     working = session.get(ProjectWorkingRevision, working_revision_id)
     if not working or working.project_id != project.id:
         raise HTTPException(
@@ -402,7 +403,7 @@ def merge_project_to_plant(
     session: Session = Depends(get_session),
     current_user: CurrentUser = Depends(require_roles("user")),
 ):
-    project = _get_project_by_number(session, project_number)
+    project = _resolve_project(session, project_number)
     ready_rows = session.exec(
         select(ProjectWorkingRevision).where(
             ProjectWorkingRevision.project_id == project.id,
