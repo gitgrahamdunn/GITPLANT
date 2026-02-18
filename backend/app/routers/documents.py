@@ -54,7 +54,7 @@ from app.security import CurrentUser, get_current_user, require_roles
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-DOCUMENT_STORAGE_DIR = get_document_storage_path()
+DOCUMENT_STORAGE_DIR = get_document_storage_path(ensure_exists=False)
 
 
 def record_audit_event(
@@ -91,7 +91,7 @@ def _clear_documents_and_storage(session: Session) -> None:
     session.exec(delete(Document))
     session.commit()
 
-    for path in DOCUMENT_STORAGE_DIR.glob("*.pdf"):
+    for path in get_document_storage_path(ensure_exists=False).glob("*.pdf"):
         path.unlink(missing_ok=True)
 
 
@@ -352,7 +352,7 @@ def create_documents_from_pdf_upload(
         session.refresh(document)
 
         file.file.seek(0)
-        destination = DOCUMENT_STORAGE_DIR / f"{document.id}.pdf"
+        destination = get_document_storage_path() / f"{document.id}.pdf"
         with destination.open("wb") as output_stream:
             output_stream.write(file.file.read())
         document.file_path = str(destination)
@@ -395,7 +395,7 @@ def upload_plant_revision(
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
     next_revision = _next_revision(document.current_revision)
-    destination = DOCUMENT_STORAGE_DIR / f"{document_id}.pdf"
+    destination = get_document_storage_path() / f"{document_id}.pdf"
     file.file.seek(0)
     destination.write_bytes(file.file.read())
 
