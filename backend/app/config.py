@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
@@ -6,7 +7,27 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_ROOT.parent
-DEFAULT_DATA_DIR = BACKEND_ROOT / ".data"
+
+
+def _default_data_dir() -> Path:
+    configured_data_dir = os.getenv("DATA_DIR")
+    if configured_data_dir:
+        candidate = Path(configured_data_dir)
+        if not candidate.is_absolute():
+            candidate = Path("/tmp") / candidate
+    else:
+        candidate = Path("/tmp/gitplant-data")
+
+    try:
+        candidate.relative_to(REPO_ROOT)
+    except ValueError:
+        return candidate
+
+    return Path("/tmp/gitplant-data")
+
+
+# Vercel serverless functions run on a read-only filesystem except for /tmp.
+DEFAULT_DATA_DIR = _default_data_dir()
 DEFAULT_DATA_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_DB_PATH = DEFAULT_DATA_DIR / "edms.db"
 DEFAULT_DATABASE_URL = f"sqlite:///{quote(str(DEFAULT_DB_PATH), safe='/')}"
