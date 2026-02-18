@@ -43,6 +43,7 @@ async def hardening_middleware(request: Request, call_next):
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
+    health.run_runtime_storage_check()
 
 
 @app.get("/", tags=["root"])
