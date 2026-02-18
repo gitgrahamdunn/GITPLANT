@@ -242,6 +242,15 @@ class ProjectWorkingRevisionResponse(ORMResponseModel):
     updated_at: datetime
 
 
+
+class ProjectEventResponse(ORMResponseModel):
+    id: int
+    event_type: str
+    actor_email: str
+    details: str
+    created_at: datetime
+
+
 class ProjectDetailResponse(ORMResponseModel):
     id: str
     project_number: str
@@ -251,6 +260,7 @@ class ProjectDetailResponse(ORMResponseModel):
     created_by: str
     created_at: datetime
     working_docs: list[ProjectWorkingRevisionResponse]
+    events: list[ProjectEventResponse] = []
 
 
 class ProjectPullRequest(BaseModel):

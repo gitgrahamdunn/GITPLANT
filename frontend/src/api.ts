@@ -56,6 +56,28 @@ function formatErrorPayload(payload: unknown, fallback: string): string {
   return fallback;
 }
 
+async function readErrorMessage(response: Response): Promise<string> {
+  const text = await response.text();
+  const fallback = `HTTP ${response.status} ${response.statusText}${text ? ` - ${text}` : ""}`;
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!text) {
+    return fallback;
+  }
+
+  if (contentType.includes("application/json")) {
+    try {
+      const payload = JSON.parse(text) as unknown;
+      const parsed = formatErrorPayload(payload, text);
+      return `HTTP ${response.status} ${response.statusText} - ${parsed}`;
+    } catch {
+      return fallback;
+    }
+  }
+
+  return fallback;
+}
+
 async function requestForm<T>(
   path: string,
   options: RequestInit = {},
@@ -63,20 +85,7 @@ async function requestForm<T>(
   const response = await fetch(buildApiUrl(path), options);
 
   if (!response.ok) {
-    let message = `Request failed with ${response.status}`;
-    const contentType = response.headers.get("content-type") ?? "";
-
-    if (contentType.includes("application/json")) {
-      const payload = await response.json();
-      message = formatErrorPayload(payload, message);
-    } else {
-      const text = await response.text();
-      if (text) {
-        message = text;
-      }
-    }
-
-    throw new Error(message);
+    throw new Error(await readErrorMessage(response));
   }
 
   return response.json() as Promise<T>;
@@ -92,23 +101,27 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (!response.ok) {
-    let message = `Request failed with ${response.status}`;
-    const contentType = response.headers.get("content-type") ?? "";
-
-    if (contentType.includes("application/json")) {
-      const payload = await response.json();
-      message = formatErrorPayload(payload, message);
-    } else {
-      const text = await response.text();
-      if (text) {
-        message = text;
-      }
-    }
-
-    throw new Error(message);
+    throw new Error(await readErrorMessage(response));
   }
 
   return response.json() as Promise<T>;
+}
+
+export async function postUiAuditEvent(
+  token: string | null,
+  payload: { name: string; payload?: Record<string, unknown> },
+): Promise<void> {
+  if (!token) {
+    return;
+  }
+
+  await request<{ status: string }>("/dev/audit/ui", {
+    method: "POST",
+    headers: {
+      ...getAuthHeaders(token),
+    },
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function login(
@@ -232,20 +245,7 @@ export async function downloadDocumentPdf(
   });
 
   if (!response.ok) {
-    let message = `Request failed with ${response.status}`;
-    const contentType = response.headers.get("content-type") ?? "";
-
-    if (contentType.includes("application/json")) {
-      const payload = await response.json();
-      message = formatErrorPayload(payload, message);
-    } else {
-      const text = await response.text();
-      if (text) {
-        message = text;
-      }
-    }
-
-    throw new Error(message);
+    throw new Error(await readErrorMessage(response));
   }
 
   return response.blob();
@@ -351,7 +351,7 @@ export async function mergeProjectToPlant(
 }
 
 export async function seedDemoData(token: string): Promise<DemoSeedResponse> {
-  return request<DemoSeedResponse>("/documents/admin/dev/seed-demo", {
+  return request<DemoSeedResponse>("/dev/seed", {
     method: "POST",
     headers: {
       ...getAuthHeaders(token),
@@ -360,7 +360,7 @@ export async function seedDemoData(token: string): Promise<DemoSeedResponse> {
 }
 
 export async function resetDemoData(token: string): Promise<DemoSeedResponse> {
-  return request<DemoSeedResponse>("/documents/admin/dev/reset-demo", {
+  return request<DemoSeedResponse>("/dev/reset", {
     method: "POST",
     headers: {
       ...getAuthHeaders(token),

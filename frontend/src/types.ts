@@ -93,6 +93,14 @@ export interface ProjectWorkingDoc {
   updated_at: string;
 }
 
+export interface ProjectEvent {
+  id: number;
+  event_type: string;
+  actor_email: string;
+  details: string;
+  created_at: string;
+}
+
 export interface ProjectDetail {
   id: string;
   project_number: string;
@@ -102,6 +110,7 @@ export interface ProjectDetail {
   created_by: string;
   created_at: string;
   working_docs: ProjectWorkingDoc[];
+  events: ProjectEvent[];
 }
 
 export interface ProjectPullResponse {
