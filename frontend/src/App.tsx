@@ -17,8 +17,10 @@ import { logUiEvent } from "./logUiEvent";
 import type { MeResponse, ProjectDetail, ProjectSummary, SearchDocument } from "./types";
 
 const STORAGE_KEY = "gitplant.token";
+const THEME_STORAGE_KEY = "gitplant.theme";
 type Tab = "plant" | "projects";
 type ProjectFilter = "OPEN" | "MERGED" | "CLOSED";
+type ThemeMode = "dark" | "light";
 
 export default function App(): JSX.Element {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(STORAGE_KEY));
@@ -37,6 +39,10 @@ export default function App(): JSX.Element {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    return savedTheme === "light" ? "light" : "dark";
+  });
 
   const authed = Boolean(token && me);
 
@@ -58,6 +64,11 @@ export default function App(): JSX.Element {
     const t = window.setTimeout(() => setToast(null), 2500);
     return () => window.clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
 
   async function refreshAll(authToken: string): Promise<void> {
     const [profile, docsResp, projResp] = await Promise.all([
@@ -126,6 +137,14 @@ export default function App(): JSX.Element {
         <strong>GITPLANT</strong>
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" />
         <div className="header-actions">
+          <button
+            type="button"
+            className="theme-toggle"
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+          >
+            {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
+          </button>
           {authed ? (
             <>
               <details>
