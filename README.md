@@ -54,3 +54,12 @@ This runs:
 - SQLite DB path defaults to `backend/.data/edms.db`
 - Plant storage defaults to `backend/storage/plant`
 - Document upload storage defaults to `backend/storage/documents`
+
+
+## Vercel deployment notes
+
+- Set `VITE_API_URL` in the frontend environment to your deployed backend URL (for example `https://<your-backend>.vercel.app`).
+- Backend CORS allows:
+  - `https://gitplant-oggy.vercel.app`
+  - any `https://*.vercel.app` origin (for Vercel preview deployments)
+- CORS preflight `OPTIONS` requests are handled by FastAPI `CORSMiddleware`.
