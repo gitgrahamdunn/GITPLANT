@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { login } from "../api";
+import { getApiBaseUrl, login } from "../api";
 import Banner from "./ui/Banner";
 import Button from "./ui/Button";
 import Card from "./ui/Card";
@@ -14,6 +14,7 @@ export default function LoginPanel({ onToken }: LoginPanelProps): JSX.Element {
   const [password, setPassword] = useState("user123");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const apiBaseUrl = getApiBaseUrl();
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>,
@@ -57,6 +58,7 @@ export default function LoginPanel({ onToken }: LoginPanelProps): JSX.Element {
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? "Signing in…" : "Sign in"}
         </Button>
+        <small className="login-api-debug">API: {apiBaseUrl}</small>
       </form>
 
       {error ? <Banner tone="error" message={error} /> : null}

@@ -24,6 +24,10 @@ const frontendEnv = (import.meta as ImportMeta & {
 const configuredApiUrl = frontendEnv?.VITE_API_URL?.trim()?.replace(/\/$/, "");
 const API_BASE_URL = configuredApiUrl || window.location.origin;
 
+export function getApiBaseUrl(): string {
+  return API_BASE_URL;
+}
+
 if (!configuredApiUrl) {
   console.error(
     "[api] Missing required VITE_API_URL. Falling back to same-origin requests. " +
@@ -160,6 +164,9 @@ export async function login(
   email: string,
   password: string,
 ): Promise<LoginResponse> {
+  const loginUrl = buildApiUrl("/auth/login");
+  console.log("[auth] Login URL:", loginUrl);
+
   return request<LoginResponse>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
