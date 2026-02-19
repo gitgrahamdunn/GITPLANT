@@ -41,13 +41,35 @@ def test_dev_endpoints_disabled_message() -> None:
       settings.enable_demo_endpoints = original
 
 
-def test_cors_preflight_allows_frontend_origin() -> None:
+def test_cors_preflight_allows_vercel_production_origin() -> None:
     response = client.options(
         '/projects',
         headers={
-            'Origin': 'http://localhost:5173',
+            'Origin': 'https://gitplant-oggy.vercel.app',
             'Access-Control-Request-Method': 'POST',
         },
     )
     assert response.status_code == 200
-    assert response.headers['access-control-allow-origin'] == 'http://localhost:5173'
+    assert response.headers['access-control-allow-origin'] == 'https://gitplant-oggy.vercel.app'
+
+
+def test_cors_preflight_allows_vercel_preview_origin() -> None:
+    response = client.options(
+        '/projects',
+        headers={
+            'Origin': 'https://preview-123.vercel.app',
+            'Access-Control-Request-Method': 'POST',
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers['access-control-allow-origin'] == 'https://preview-123.vercel.app'
+
+
+def test_cors_debug_reports_origin_and_allowed_origins() -> None:
+    origin = 'https://gitplant-oggy.vercel.app'
+    response = client.get('/cors-debug', headers={'Origin': origin})
+    assert response.status_code == 200
+    body = response.json()
+    assert body['origin'] == origin
+    assert 'https://gitplant-oggy.vercel.app' in body['allowed_origins']
+    assert body['allowed_origin_regex'] == r'https://.*\.vercel\.app'

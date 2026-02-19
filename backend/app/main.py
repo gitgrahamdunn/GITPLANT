@@ -12,17 +12,21 @@ from app.routers import auth, dev, documents, health, projects
 
 app = FastAPI(title=settings.app_name)
 
-if settings.app_env.lower() in {"dev", "development", "local", "test"}:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-        ],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+allowed_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://gitplant-oggy.vercel.app",
+]
+allowed_origin_regex = r"https://.*\.vercel\.app"
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_origin_regex=allowed_origin_regex,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(health.router)
 app.include_router(auth.router)
@@ -52,6 +56,16 @@ def read_root():
         "name": settings.app_name,
         "environment": settings.app_env,
         "message": "EDMS backend is running",
+    }
+
+
+@app.get("/cors-debug", tags=["debug"])
+def cors_debug(request: Request):
+    return {
+        "origin": request.headers.get("origin"),
+        "allowed_origins": allowed_origins,
+        "allowed_origin_regex": allowed_origin_regex,
+        "allow_credentials": False,
     }
 
 
