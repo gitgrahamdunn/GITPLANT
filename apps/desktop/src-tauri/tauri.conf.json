@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Gitplant Desktop",
+  "version": "0.1.0",
+  "identifier": "com.gitplant.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev:web -w @gitplant/desktop",
+    "beforeBuildCommand": "npm run build:web -w @gitplant/desktop",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {"windows": [{"title": "Gitplant Desktop", "width": 1400, "height": 900}]},
+  "bundle": {"active": true, "targets": "all"}
+}
