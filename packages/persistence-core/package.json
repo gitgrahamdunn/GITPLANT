@@ -1,0 +1,9 @@
+{
+  "name": "@gitplant/persistence-core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@gitplant/shared-types": "0.1.0"
+  }
+}

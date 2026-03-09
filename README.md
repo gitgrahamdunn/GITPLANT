@@ -1,65 +1,43 @@
-# GitPlant EDMS MVP
+# Gitplant Pass 1 (Desktop-first)
 
-GitPlant is a document-control MVP for engineering teams.
+This repository now contains the Pass 1 desktop-first vertical slice defined in `docs/PDF_REVIEW_ARCHITECTURE_PACKAGE.md`.
 
-## Workflow mapping
+## Workspace structure
 
-- **Code (Plant)** = `main` branch (source of truth documents)
-- **Pull Request (Project)** = project workflow against Plant
+- `apps/desktop` – Tauri desktop shell + React/TypeScript UI
+- `apps/desktop/src-tauri` – Rust native commands, SQLite schema, managed file storage
+- `packages/shared-types` – shared contracts
+- `packages/viewer-core` – renderer abstraction interfaces
+- `packages/viewer-pdfjs` – PDF.js renderer adapter implementation
+- `packages/persistence-core` – persistence gateway interfaces used by UI
 
-## Quickstart
+## Prerequisites
 
-From repository root, run one command:
+- Node.js 20+
+- Rust stable toolchain
+- Tauri system dependencies: https://v2.tauri.app/start/prerequisites/
 
-```bash
-npm run dev
-```
+## Commands
 
-This starts both:
-- Backend API on `http://127.0.0.1:8000`
-- Frontend UI on `http://127.0.0.1:5173`
+From repository root:
 
-## Single-server mode (API + UI on one port)
+- Dev (one command): `npm run desktop:dev`
+- Desktop build: `npm run desktop:build`
+- Tests: `npm test`
+- Typecheck: `npm run typecheck`
 
-```bash
-npm run start
-```
+## Pass 1 manual verification checklist
 
-This builds frontend and serves it via FastAPI at `http://127.0.0.1:8000`.
+1. Run `npm run desktop:dev` and confirm desktop window opens.
+2. Click **Import PDF**, pick a local `.pdf` through native picker.
+3. Confirm document appears in viewer and page renders.
+4. Use **Prev/Next** and **Zoom In/Zoom Out/Fit Width**.
+5. Confirm imported document appears in **Recent Documents**.
+6. Restart app and confirm recent item reopens.
 
-## Demo account
+## Deferred to Pass 2+
 
-- `user@edms.local / user123`
-
-## Demo controls
-
-Dev endpoints are enabled automatically when `APP_ENV=dev` (or explicitly with `ENABLE_DEMO_ENDPOINTS=true`).
-
-- `POST /dev/seed` → wipe + reseed docs/projects/audit events + placeholder PDFs
-- `POST /dev/reset` → wipe demo data + storage
-- `GET /dev/status` → enabled flag + reason + entity counts
-
-## Testing (single command)
-
-```bash
-npm test
-```
-
-This runs:
-- backend pytest suite
-- scripted frontend/backend happy-path flow
-
-## Persistence
-
-- SQLite DB path defaults to `backend/.data/edms.db`
-- Plant storage defaults to `backend/storage/plant`
-- Document upload storage defaults to `backend/storage/documents`
-
-
-## Vercel deployment notes
-
-- Set `VITE_API_URL` in the frontend environment to your deployed backend URL (for example `https://<your-backend>.vercel.app`).
-- Backend CORS allows:
-  - `https://gitplant-oggy.vercel.app`
-  - any `https://*.vercel.app` origin (for Vercel preview deployments)
-- CORS preflight `OPTIONS` requests are handled by FastAPI `CORSMiddleware`.
+- Markup tools/redlines/comments/workflow
+- Collaboration/sync/export pipeline
+- Native renderer adapter
+- Advanced performance optimization and tile rendering
