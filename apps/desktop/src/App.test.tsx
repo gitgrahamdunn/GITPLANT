@@ -8,7 +8,10 @@ vi.mock('./lib/tauriGateway', () => ({
     importPdfFromPicker: vi.fn(),
     openDocument: vi.fn(),
     readDocumentBytes: vi.fn(),
-    updatePageCount: vi.fn()
+    updatePageCount: vi.fn(),
+    extractPagesToDerivedRevision: vi.fn(),
+    triggerTextExtraction: vi.fn(),
+    listExtractedPageText: vi.fn().mockResolvedValue([])
   }
 }));
 
@@ -17,5 +20,6 @@ describe('App smoke', () => {
     render(<App />);
     expect(screen.getByText('Gitplant Desktop')).toBeInTheDocument();
     expect(await screen.findByText('No recent documents.')).toBeInTheDocument();
+    expect(screen.getByText('Dev scaffolding')).toBeInTheDocument();
   });
 });

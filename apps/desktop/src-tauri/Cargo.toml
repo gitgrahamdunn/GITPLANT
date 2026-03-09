@@ -15,6 +15,11 @@ serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }
 uuid = { version = "1", features = ["v4", "serde"] }
 rfd = "0.15"
+lopdf = "0.35"
+serde_json = "1"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+
+[dev-dependencies]
+tempfile = "3"

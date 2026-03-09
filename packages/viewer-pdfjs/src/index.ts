@@ -1,6 +1,13 @@
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import type { DocumentMetadata, RenderResult, RenderSpec, ViewerRenderer } from '@gitplant/viewer-core';
+import type {
+  DocumentMetadata,
+  PageInfo,
+  RenderLayer,
+  RenderResult,
+  RenderSpec,
+  ViewerRenderer
+} from '@gitplant/viewer-core';
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -28,7 +35,33 @@ export class PdfjsRendererAdapter implements ViewerRenderer {
     return this.document.numPages;
   }
 
+  async getPageInfo(pageNumber: number): Promise<PageInfo> {
+    if (!this.document) throw new Error('No document opened');
+    const page = await this.document.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: 1 });
+    return { pageNumber, width: viewport.width, height: viewport.height };
+  }
+
   async renderPage(pageNumber: number, spec: RenderSpec): Promise<RenderResult> {
+    return this.renderBasePdfPage(pageNumber, spec);
+  }
+
+  async renderLayer(layer: RenderLayer, pageNumber: number, spec: RenderSpec): Promise<RenderResult> {
+    if (layer.kind === 'base_pdf' || layer.kind === 'overlay_pdf') {
+      return this.renderBasePdfPage(pageNumber, spec);
+    }
+    const page = await this.getPageInfo(pageNumber);
+    const canvas = document.createElement('canvas');
+    canvas.width = page.width;
+    canvas.height = page.height;
+    return {
+      width: page.width,
+      height: page.height,
+      imageDataUrl: canvas.toDataURL('image/png')
+    };
+  }
+
+  private async renderBasePdfPage(pageNumber: number, spec: RenderSpec): Promise<RenderResult> {
     if (!this.document) throw new Error('No document opened');
     const page = await this.document.getPage(pageNumber);
     const viewport = page.getViewport({ scale: spec.scale });
