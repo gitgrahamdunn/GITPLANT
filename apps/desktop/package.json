@@ -17,7 +17,11 @@
     "@gitplant/viewer-pdfjs": "0.1.0",
     "@tauri-apps/api": "^2.0.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "@gitplant/viewer-core": "0.1.0",
+    "@gitplant/processing-core": "0.1.0",
+    "@gitplant/document-transform-core": "0.1.0",
+    "@gitplant/text-extraction-core": "0.1.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",
