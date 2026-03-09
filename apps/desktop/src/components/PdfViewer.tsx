@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createBaseRenderScene, withOverlayPdfLayer } from '@gitplant/viewer-core';
-import { PdfjsRendererAdapter } from '@gitplant/viewer-pdfjs';
+import { createBaseRenderScene, withOverlayPdfLayer, type ViewerRenderer } from '@gitplant/viewer-core';
 
 type Props = {
   bytes: Uint8Array | null;
   title: string;
   overlayBytes?: Uint8Array | null;
   onPageCount?: (n: number) => void;
+  rendererFactory?: () => ViewerRenderer;
 };
 
-export function PdfViewer({ bytes, title, overlayBytes, onPageCount }: Props) {
-  const renderer = useMemo(() => new PdfjsRendererAdapter(), []);
+export function PdfViewer({ bytes, title, overlayBytes, onPageCount, rendererFactory }: Props) {
+  const renderer = useMemo(() => (rendererFactory ? rendererFactory() : null), [rendererFactory]);
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -20,7 +20,7 @@ export function PdfViewer({ bytes, title, overlayBytes, onPageCount }: Props) {
 
   useEffect(() => {
     void (async () => {
-      if (!bytes) return;
+      if (!bytes || !renderer) return;
       setState('loading');
       try {
         await renderer.openDocument(bytes);
@@ -38,13 +38,13 @@ export function PdfViewer({ bytes, title, overlayBytes, onPageCount }: Props) {
       }
     })();
     return () => {
-      void renderer.closeDocument();
+      if (renderer) void renderer.closeDocument();
     };
-  }, [bytes, overlayBytes]);
+  }, [bytes, overlayBytes, renderer]);
 
   useEffect(() => {
     void (async () => {
-      if (!bytes || state === 'error' || pageCount === 0) return;
+      if (!bytes || !renderer || state === 'error' || pageCount === 0) return;
       setState('loading');
       try {
         const nextScene = {
@@ -63,6 +63,7 @@ export function PdfViewer({ bytes, title, overlayBytes, onPageCount }: Props) {
   }, [page, zoom]);
 
   if (!bytes) return <div>Select a PDF to view.</div>;
+  if (!renderer) return <div>Viewer renderer unavailable.</div>;
   if (state === 'error') return <div role="alert">Failed to render document.</div>;
   return (
     <div>

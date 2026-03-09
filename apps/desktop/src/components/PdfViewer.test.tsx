@@ -21,7 +21,10 @@ describe('PdfViewer states', () => {
 
   it('ui-level code avoids direct pdfjs imports', () => {
     const appSource = fs.readFileSync(path.resolve(__dirname, '../App.tsx'), 'utf8');
+    const viewerSource = fs.readFileSync(path.resolve(__dirname, './PdfViewer.tsx'), 'utf8');
     expect(appSource).not.toContain('pdfjs-dist');
     expect(appSource).not.toContain('@gitplant/viewer-pdfjs');
+    expect(viewerSource).not.toContain('pdfjs-dist');
+    expect(viewerSource).not.toContain('@gitplant/viewer-pdfjs');
   });
 });

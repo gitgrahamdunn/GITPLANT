@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { tauriGateway } from './lib/tauriGateway';
 import { PdfViewer } from './components/PdfViewer';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { createViewerRenderer } from './lib/viewerRenderer';
 import type { ExtractedPageTextRecord, RecentDocumentView } from '@gitplant/shared-types';
 
 export function App() {
@@ -90,6 +91,7 @@ export function App() {
             bytes={bytes}
             overlayBytes={overlayBytes}
             title={title}
+            rendererFactory={createViewerRenderer}
             onPageCount={(n) => {
               if (currentRevisionId) void tauriGateway.updatePageCount(currentRevisionId, n);
             }}
