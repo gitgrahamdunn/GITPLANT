@@ -11,6 +11,12 @@
     "desktop:build": "npm run build -w @gitplant/desktop",
     "test": "npm run test -ws --if-present",
     "typecheck": "npm run typecheck -ws --if-present",
-    "build": "npm run build -ws --if-present"
+    "build": "npm run build -ws --if-present",
+    "report:status": "node scripts/write-status-report.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:update": "playwright test --update-snapshots"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
   }
 }
