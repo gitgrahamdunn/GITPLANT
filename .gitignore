@@ -6,22 +6,20 @@ venv/
 
 # Node
 node_modules/
-frontend/node_modules/
-frontend/dist/
 dist/
 
 # Env
 .env
-backend/.env
-frontend/.env
 
-# Runtime app data
-backend/.data/
-backend/storage/documents/
-backend/storage/plant/
-backend/storage/projects/
-frontend/*.tsbuildinfo
+# Desktop build / tool artifacts
+*.tsbuildinfo
+src-tauri/target/
 
-# Test artifacts
-frontend/playwright-report/
-frontend/test-results/
+# OpenClaw workspace files
+.openclaw/
+AGENTS.md
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md

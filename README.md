@@ -1,56 +1,162 @@
-# Gitplant Pass 1.5 (Desktop-first architecture upgrade)
+# Gitplant
 
-This repository now includes the architectural upgrade for multi-layer viewing, document transformations, and processing/indexing scaffolding.
+Gitplant is a **desktop-first collaborative engineering PDF review tool** for squad check and drawing-review workflows.
 
-Design authority: `docs/PDF_REVIEW_ARCHITECTURE_PACKAGE.md`.
+## Product direction
 
-## Repo/package structure
+Gitplant is being built for:
 
-- `apps/desktop` – Tauri shell + React UI
-- `apps/desktop/src-tauri` – Rust commands, SQLite schema, managed storage, transform + processing proof paths
-- `packages/shared-types` – domain/shared records for revisions, jobs, extracted text
-- `packages/viewer-core` – renderer abstraction + render-scene/layer model
-- `packages/viewer-pdfjs` – PDF.js adapter implementation
-- `packages/persistence-core` – UI persistence gateway contracts
-- `packages/document-transform-core` – transform command/result contracts
-- `packages/document-transform-pdflib` – adapter slot (desktop implementation currently in Rust service)
-- `packages/processing-core` – processing job and OCR provider contracts
-- `packages/text-extraction-core` – text extraction provider contracts
+- fast PDF viewing
+- structured markups
+- threaded comments
+- squad check workflows
+- review confirmations
+- reminder automation
+- audit trails
+- revision comparison with overlay mode
 
-## What changed
+Reference products are closer to **Bluebeam**, **Acrobat review**, and engineering drawing review tools.
 
-- Viewer architecture now models stacked render layers (`base_pdf`, `overlay_pdf`, future markup/selection overlays).
-- Transformations are isolated behind dedicated command boundary and create **derived revisions**.
-- Processing pipeline tracks jobs and stores extracted page text by revision/page.
-- Schema supports immutable originals, revision lineage, processing jobs, extracted text, and audit events.
-- Desktop app includes minimal dev scaffolding buttons to trigger text extraction and extract-page transformation proof path.
+## Architecture source of truth
 
-## Implemented now (real paths)
+Primary architecture document:
 
-1. Import + open PDFs (existing behavior still supported).
-2. Extract page range to a new derived revision (managed storage + metadata persistence).
-3. Trigger text extraction job for current revision and persist per-page text.
+- `docs/PDF_REVIEW_ARCHITECTURE_PACKAGE.md`
 
-## Scaffolded for later
+Supporting documents:
 
-- OCR provider implementation (boundary and job type already in place)
-- Full transform UI for delete/insert/reorder/combine
-- Native renderer adapter implementation
-- Full markup/selection overlay rendering
+- `docs/DESKTOP_FIRST_ARCHITECTURE.md`
+- `docs/PROJECT_HANDOFF_SUMMARY.md`
+
+## Locked architecture decisions
+
+### Desktop first
+
+Gitplant runs as a **Tauri desktop app**.
+
+Stack:
+
+- Tauri
+- React + TypeScript
+- Vite
+- Rust service layer
+- SQLite
+- PDF.js renderer adapter
+
+The intended developer entry point is a single desktop command:
+
+```bash
+npm run desktop:dev
+```
+
+### Service ownership
+
+**Rust/Tauri is the authoritative application service layer.**
+
+Rust owns:
+
+- SQLite persistence
+- document import
+- file storage
+- derived revision creation
+- processing jobs
+- text extraction
+- export operations
+- desktop-native integrations
+
+TypeScript owns:
+
+- UI
+- viewer state
+- renderer abstraction usage
+- markup model
+- workflow UI
+- shared contracts
+
+### Renderer boundary
+
+Rendering must remain replaceable.
+
+Current renderer:
+
+- PDF.js
+
+Architecture slots:
+
+- `packages/viewer-core`
+- `packages/viewer-pdfjs`
+- future native renderer adapter
+
+The UI must not import PDF.js internals directly.
+
+### Viewer model
+
+The viewer is layer-based.
+
+Current/future layer kinds:
+
+- `base_pdf`
+- `overlay_pdf`
+- `markup_overlay`
+- `selection_overlay`
+
+This supports revision comparison, markups, anchored comments, and future selection tools.
+
+## Core domain model
+
+Primary entities include:
+
+- Workspace / Project
+- Document
+- DocumentRevision
+- MarkupLayer
+- MarkupObject
+- CommentThread
+- ReviewerAssignment
+- SquadCheck
+- Confirmation
+- Reminder
+- AuditEvent
+- ProcessingJob
+- ExtractedPageText
+
+PDF files are treated as immutable originals. Transformations create **derived revisions**.
+
+## Current implementation status
+
+Implemented now:
+
+- desktop shell
+- PDF import
+- managed local file storage
+- SQLite persistence
+- document revision model
+- renderer abstraction
+- PDF.js adapter
+- basic viewer
+- page navigation
+- zoom
+- recent documents list
+- text extraction pipeline
+- extract-pages transformation proof path
+
+Scaffolded / next:
+
+- markup engine
+- threaded comments
+- squad check workflow
+- review confirmations
+- reminder automation
+- export pipeline
+- collaboration/sync
 
 ## Commands
 
-From repository root:
+From the repository root:
 
-- Dev (desktop): `npm run desktop:dev`
-- Desktop build: `npm run desktop:build`
-- Tests: `npm test`
-- Typecheck: `npm run typecheck`
-
-## Manual verification checklist
-
-1. Run `npm run desktop:dev` and confirm desktop window opens.
-2. Import a PDF and confirm page rendering still works.
-3. Click **Extract page 1 to derived revision** and confirm no crash + viewer shows comparison-capable scene layer info.
-4. Click **Trigger text extraction** and confirm extracted row count updates.
-5. Restart app and confirm recent document still opens.
+```bash
+npm run desktop:dev
+npm run desktop:build
+npm test
+npm run typecheck
+```
